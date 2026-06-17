@@ -196,7 +196,7 @@ export class Game {
 
     if (puzzleBoss) {
       const bill = new BillRustlerPuzzle();
-      this.boss.start(10, 'Bill the Rustler');
+      this.boss.start(region.boss.health, 'Bill the Rustler');
       this.boss.setPuzzle(bill);
       this.boss.onPuzzleDamagePlayer = (dmg) => {
         this.health = Math.max(0, this.health - dmg);
@@ -205,7 +205,15 @@ export class Game {
         this.score += bonus;
       };
     } else {
+      const bill = new BillRustlerPuzzle();
       this.boss.start(region.boss.health, region.boss.name);
+      this.boss.setPuzzle(bill);
+      this.boss.onPuzzleDamagePlayer = (dmg) => {
+        this.health = Math.max(0, this.health - dmg);
+      };
+      this.boss.onPuzzleScoreBonus = (bonus) => {
+        this.score += bonus;
+      };
     }
 
     this.fadeAlpha = 0.3;

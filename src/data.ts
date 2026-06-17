@@ -42,7 +42,7 @@ export const REGIONS: RegionDef[] = [
     name: 'Texas Plains',
     gangName: 'The Rustlers',
     gangGrip: 100,
-    boss: { name: 'Cattle Rustler Bill', health: 10 },
+    boss: { name: 'Cattle Rustler Bill', health: 45 },
     towns: [
       {
         id: 'dusty-trail',
