@@ -198,6 +198,9 @@ export class Game {
       const bill = new BillRustlerPuzzle();
       this.boss.start(region.boss.health, 'Bill the Rustler');
       this.boss.setPuzzle(bill);
+      this.boss.onPuzzleStarting = () => {
+        bill.lassosAvailable = this.lassos;
+      };
       this.boss.onPuzzleDamagePlayer = (dmg) => {
         this.health = Math.max(0, this.health - dmg);
       };
@@ -206,11 +209,20 @@ export class Game {
       };
       this.boss.onTurnPenalty = (n) => {
         this.board.turnBudget = Math.max(0, this.board.turnBudget - n);
+      };
+      this.boss.onLassosUsed = (n) => {
+        this.lassos = Math.max(0, this.lassos - n);
+      };
+      this.boss.onBoardPhaseEnter = () => {
+        this.ensureBoardResources();
       };
     } else {
       const bill = new BillRustlerPuzzle();
       this.boss.start(region.boss.health, region.boss.name);
       this.boss.setPuzzle(bill);
+      this.boss.onPuzzleStarting = () => {
+        bill.lassosAvailable = this.lassos;
+      };
       this.boss.onPuzzleDamagePlayer = (dmg) => {
         this.health = Math.max(0, this.health - dmg);
       };
@@ -220,10 +232,26 @@ export class Game {
       this.boss.onTurnPenalty = (n) => {
         this.board.turnBudget = Math.max(0, this.board.turnBudget - n);
       };
+      this.boss.onLassosUsed = (n) => {
+        this.lassos = Math.max(0, this.lassos - n);
+      };
+      this.boss.onBoardPhaseEnter = () => {
+        this.ensureBoardResources();
+      };
     }
 
     this.fadeAlpha = 0.3;
     this.state = GameState.BossActive;
+  }
+
+  private ensureBoardResources(): void {
+    if (this.board.cowCount < 2) {
+      this.board.spawnLassos(1);
+      this.board.spawnCows(1);
+    }
+    if (this.board.lassoCount < 1 && this.lassos < CONFIG.game.lassoMax) {
+      this.board.spawnLassos(1);
+    }
   }
 
   handleKeyDown(key: string, shiftKey = false): void {

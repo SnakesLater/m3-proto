@@ -18,6 +18,10 @@ The major architectural shifts from PAST:
 7. **Health decay removed from boss fights** — replaced with Deadeye drain + puzzle system (DECISIONS.md §8)
 8. **Puzzle mode added** — Deadeye max triggers boss-specific interactive puzzle (DECISIONS.md §9)
 9. **Bill the Rustler puzzle** — first puzzle boss with telegraph/choice/resolve cycle (DECISIONS.md §10)
+10. **Lasso + Hold puzzle actions** — 4 actions in 2×2 grid; Lasso spends board resource, Hold skips (DECISIONS.md §10.3)
+11. **Cow pool model** — 10 names consumed individually; grass type joins when pool empties (DECISIONS.md §9.5, §10.4)
+12. **QTE damage unified** — all patterns deal 1 HP on hit, turn penalty on miss (DECISIONS.md §4.4)
+13. **Resource injection** — BoardPhase automatically ensures cows and lassos on board (DECISIONS.md §9.7)
 
 ---
 
@@ -252,18 +256,24 @@ BoardPhase ──(play on board, match hearts for +1 damage each)──→ moves
 
 ### Boss Health & Damage Sources
 
-| Source | Damage | When |
-|--------|--------|------|
-| Heart adjacency pop | 1 per pop | During BoardPhase — any match adjacent to a heart |
-| Pattern completion | Varies by pattern | End of PatternPhase |
-| Puzzle resolution | Varies by puzzle | End of PuzzleResolve state |
-| Deadeye drain (player) | 1 HP when deadeye hits 0 | During BoardPhase |
+| Source | Damage | Penalty on Miss | When |
+|--------|--------|-----------------|------|
+| Heart adjacency pop | 1 per pop | — | BoardPhase — any match adjacent to a heart |
+| Pattern: Fan Fire | 1 per bullet hit (0-3) | 1 turn per miss (0-3) | End of PatternPhase |
+| Pattern: Dynamite Toss | 1 if hit | 1 turn penalty | End of PatternPhase |
+| Pattern: Quick Draw | 1 if hit | 1 turn penalty | End of PatternPhase |
+| Pattern: Reload Window | 1 if any clicks | 1 turn penalty | End of PatternPhase |
+| Puzzle: Dynamite on Bill | 10 | — | PuzzleResolve |
+| Puzzle: Lasso/Revolver on Bill | 2 | — | PuzzleResolve |
+| Puzzle: Grazing hit | 1 | 1 turn penalty | PuzzleResolve |
+| Puzzle: Miss | 0 | 1 turn penalty | PuzzleResolve |
+| Deadeye drain (player) | 1 HP when deadeye hits 0 | — | BoardPhase |
 
 **Progression damage table:**
 ```
 Heart pops:      1 dmg each, unlimited via heart respawn
-Patterns:        0-4 dmg per cycle (3 moves)
-Puzzle mode:     0-2 dmg per trigger (when deadeye maxes)
+Patterns:        0-3 dmg per cycle (3 moves), 0-3 turn penalty
+Puzzle mode:     0-10 dmg per trigger (depends on action)
 Deadeye drain:   1.5/s drain; 0 = 1 player damage + reset to 50
 ```
 
@@ -272,27 +282,27 @@ Deadeye drain:   1.5/s drain; 0 = 1 player damage + reset to 50
 **Fan Fire:**
 - 3 horizontal click targets appear left-to-right sequentially
 - 500ms window per target
-- Clicking = 1 hit (damage = total hits, max 3)
+- Each hit = 1 damage, each miss = 1 turn penalty (damage 0-3, penalty 0-3)
 - Telegraph: 0.8s red lines from boss to target positions
 - Hit visual: green circle with checkmark
 
 **Dynamite Toss:**
-- Dynamite stick arcs across screen (quadratic bezier)
+- Dynamite stick arcs across screen (quadratic bezier) over 3.0s (slowed from 1.0s)
 - Click target during middle 50% of arc (between 25%–75% progress)
-- Hit = 2 damage, miss = 0
-- Telegraph: 0.7s spark particles at origin
+- Hit = 1 damage, miss = 1 turn penalty
+- Telegraph: 1.0s spark particles at origin
 - Hit visual: explosion burst
 
 **Quick Draw Standoff:**
 - Crosshair drifts erratically on screen during 1.2s telegraph
 - "DRAW!" flash → 0.65s click window
-- Click within 50px radius of crosshair = 2 damage
+- Hit = 1 damage, miss = 1 turn penalty
 - Telegraph: dark overlay with pulsing crosshair
 
 **Reload Window:**
 - Boss pauses to reload (2s window)
-- Each click deals 0.5 damage, max 8 clicks = 4 damage
-- No telegraph — brief 0.3s "Boss is reloading..." notice
+- Need at least 1 click for hit (1 damage); no clicks = 1 turn penalty
+- Brief 0.3s "Boss is reloading..." notice
 - Progress bar shows remaining time
 
 ---
@@ -542,17 +552,24 @@ Dev shortcut: B key at RegionMap/TownSelect → skip directly to BossActive
 - Lasso starting placement at center top for cow levels
 - Playwright smoke tests (4 tests pass on Firefox)
 
-**Phase 4 implemented (boss puzzle mode + Deadeye drain):**
+**Phase 4 implemented (boss puzzle mode + Deadeye drain + QTE unification):**
 - Deadeye replaces health decay as primary boss tension mechanic
 - Deadeye drains at 1.5/s during BoardPhase, fills via matches
 - Deadeye hitting 0 → 1 damage + reset to 50%
 - Deadeye maxing → puzzle trigger for puzzle-capable bosses
 - Viewport shift animation (board slides down during puzzle)
-- BossPuzzle interface (start/update/draw/handleClick/done/result)
-- Bill the Rustler puzzle: 3 locations (2 cows + shed), 3 actions (Revolver/Dynamite/Wait)
-- Multiple solution outcomes with boss damage, player damage, score, and narrative text
-- `showHealthBar` flag in HUD to hide health bar during boss fights
-- Shift+B cheat key to start Bill boss fight directly
+- BossPuzzle interface (start/update/draw/handleClick/done/result) with `turnPenalty` and `lassosUsed` fields
+- Bill the Rustler puzzle: 3 dynamic locations (cows from 10-name pool + 3 buildings + grass)
+- 4 actions in 2×2 grid: Dynamite, Revolver, Lasso (spends board resource), Hold (safe skip)
+- Cow pool model: 10 names consumed individually; grass joins when pool exhausted
+- Dynamite direct hit = 10 boss damage; other hits = 1-2 damage; misses = 1 turn penalty
+- Telegraph shortened to 1.5s (was 3.0s)
+- QTE damage unified: all 4 patterns deal 1 HP on hit, turn penalty on miss
+- `PatternManager.consumeResult()` added for proper damage/turn-penalty extraction
+- Dynamite Toss slowed: arc 3.0s (was 1.0s), telegraph 1.0s, timeout 3.5s
+- Resource injection on BoardPhase: `ensureBoardResources()` spawns cows/lassos if below thresholds
+- Lasso + Hold puzzle actions with resource consumption via `onLassosUsed` callback
+- Vite config updated: `host: true`, `allowedHosts` for Tailscale remote access
 
 **Not yet implemented (Phase 5+):**
 - Boss defeat → region transition → next region unlock

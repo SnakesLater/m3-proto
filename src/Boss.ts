@@ -38,9 +38,12 @@ export class BossFight {
 
   private readonly thresholdPercentages = [1.0, 0.75, 0.5, 0.25, 0];
 
+  onPuzzleStarting: (() => void) | null = null;
   onPuzzleDamagePlayer: ((damage: number) => void) | null = null;
   onPuzzleScoreBonus: ((bonus: number) => void) | null = null;
   onTurnPenalty: ((n: number) => void) | null = null;
+  onLassosUsed: ((n: number) => void) | null = null;
+  onBoardPhaseEnter: (() => void) | null = null;
 
   constructor() {
     this.patterns = new PatternManager();
@@ -97,6 +100,7 @@ export class BossFight {
       this.puzzleSlideTimer = 0;
       this.targetViewShift = 200;
       this.puzzle.start();
+      if (this.onPuzzleStarting) this.onPuzzleStarting();
     }
   }
 
@@ -126,6 +130,7 @@ export class BossFight {
             this.state = BossState.BoardPhase;
             this.timer = 0;
             this.boardPhaseTimer = 0;
+            if (this.onBoardPhaseEnter) this.onBoardPhaseEnter();
           }
         }
         break;
@@ -149,10 +154,15 @@ export class BossFight {
       case BossState.PatternPhase:
         this.patterns.update(dt);
         if (!this.patterns.inPatternPhase) {
-          this.health = Math.max(0, this.health - this.patterns.damage);
+          const result = this.patterns.consumeResult();
+          this.health = Math.max(0, this.health - result.damage);
+          if (this.onTurnPenalty && result.turnPenalty > 0) {
+            this.onTurnPenalty(result.turnPenalty);
+          }
           this.state = BossState.BoardPhase;
           this.timer = 0;
           this.boardPhaseTimer = 0;
+          if (this.onBoardPhaseEnter) this.onBoardPhaseEnter();
         }
         break;
 
@@ -187,6 +197,9 @@ export class BossFight {
           if (this.onTurnPenalty && r.turnPenalty > 0) {
             this.onTurnPenalty(r.turnPenalty);
           }
+          if (this.onLassosUsed && r.lassosUsed > 0) {
+            this.onLassosUsed(r.lassosUsed);
+          }
           this.health = Math.max(0, this.health - r.bossDamage);
           this.puzzleDamageApplied = true;
         }
@@ -213,6 +226,7 @@ export class BossFight {
           this.state = BossState.BoardPhase;
           this.timer = 0;
           this.boardPhaseTimer = 0;
+          if (this.onBoardPhaseEnter) this.onBoardPhaseEnter();
         }
         break;
 

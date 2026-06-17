@@ -186,18 +186,44 @@
 
 **Why:** Move-based gives the player clear control — they know "I have 3 moves before the boss attacks." It creates natural pacing: make 3 matches (opportunity to pop hearts), then survive the pattern, then repeat. 3 moves feels like enough for 1-2 heart pops but not enough to stall indefinitely.
 
-### §4.3 — Pattern damage sources
+### §4.3 — Pattern damage sources (original)
 
 **Context:** Needed to define how much damage each pattern deals.
 
 **Alternatives considered:**
-1. **Fixed damage per pattern**: Fan Fire = 3, Dynamite = 2, Quick Draw = 2, Reload = variable. This is effectively what we have.
+1. **Fixed damage per pattern**: Fan Fire = 3, Dynamite = 2, Quick Draw = 2, Reload = variable. This was the original system.
 2. **Damage scales with boss HP phase**: All patterns deal more damage in phase 2/3. Not implemented yet (FUTURE).
 3. **Damage tied to weapon stats**: Weapon damage stat multiplies pattern damage. FUTURE when weapons are implemented.
 
-**Decision:** Current values: Fan Fire = hits (max 3), Dynamite = 2 (hit/miss), Quick Draw = 2 (hit/miss), Reload = clicks × 0.5 (max 4). Heart adjacency = 1 per pop. Damage applied at end of PatternPhase.
+**Decision (original):** Fan Fire = hits (max 3), Dynamite = 2 (hit/miss), Quick Draw = 2 (hit/miss), Reload = clicks × 0.5 (max 4).
 
-**Why:** Varied damage values make each pattern feel distinct. Reload rewards fast clicking (skill investment). Fan Fire rewards precision (3 separate clicks). Dynamite and Quick Draw are binary hit/miss with higher payoff. The sum of patterns + hearts gives the player a sense of progress: they're always chipping away.
+**Why:** Varied damage values made each pattern feel distinct. Reload rewarded fast clicking. Fan Fire rewarded precision. Dynamite and Quick Draw were binary hit/miss with higher payoff.
+
+### §4.4 — Unified QTE damage (1 HP hit, turn penalty on miss) [CHANGED from original §4.3]
+
+**Context:** Original pattern damage values varied (Fan Fire 0-3, Dynamite/QuickDraw 2, Reload 0-4). After playtesting, the damage differential didn't feel meaningful — all patterns felt like "chip damage" regardless of value. The real consequence of missing a pattern was nothing (miss = 0 damage, but no other penalty).
+
+**Alternatives considered:**
+1. **Keep variable damage** (original): Fan Fire 0-3, Dynamite/QuickDraw 2, Reload 0-4. Problem: Higher-damage patterns (Fan Fire) felt too punishing, lower-damage patterns (Dynamite) felt too safe to miss.
+2. **Unify to 1 HP hit, turn penalty on miss** (chosen): Every pattern deals 1 HP per hit. Missing costs 1 turn from the board turn budget. Fan Fire keeps per-bullet granularity (0-3 hits, 0-3 turn penalty).
+3. **Patterns deal 0 damage, only turn penalty**: Too extreme — removes pattern satisfaction.
+
+**Decision:** All 4 patterns standardized: hit = 1 HP to boss, miss = 1 turn penalty subtracted from `board.turnBudget`. Fan Fire is per-bullet: each missed bullet = 1 turn penalty, each hit bullet = 1 damage.
+
+**Why:** Turn penalty is a more interesting pressure mechanic than variable damage. Missing a pattern costs you board moves (fewer heart pops, fewer cow/lasso collections) rather than just "no damage this cycle." This makes patterns matter even when they deal small amounts of damage — every click counts. Fan Fire retains per-bullet granularity because it's the only pattern with sequential targeting (skill test of click timing vs. binary click-or-don't).
+
+### §4.5 — Dynamite Toss slowed (3× longer arc)
+
+**Context:** Dynamite Toss had a 1.0s arc time, making it hard to click the dynamite mid-flight.
+
+**Alternatives considered:**
+1. **Keep 1.0s arc** (original): Felt frantic. Players reported clicking randomly.
+2. **3.0s arc + 3.5s timeout** (chosen): Arc takes 3.0s to complete, player can click during middle 50% of arc.
+3. **Auto-hit on click anywhere**: Removes all skill from Dynamite Toss.
+
+**Decision:** Arc lengthened to 3.0s (was 1.0s), timeout to 3.5s (was 1.2s), telegraph to 1.0s (was 0.7s).
+
+**Why:** The original arc was too fast to track with the mouse. At 1.0s the dynamite was off-screen before most players could click. 3.0s gives a comfortable aiming window while still requiring timing (can't click too early or too late — only during 25%-75% progress window).
 
 ---
 
@@ -334,6 +360,57 @@
 
 **Why:** Immediate feedback for the puzzle outcome. The player sees the boss health bar decrease or their own health decrease right after the narrative text. The 1.0s resolve duration gives the player time to read the result before returning to BoardPhase.
 
+### §9.4 — Lasso resource flow (puzzle lasso action consumes board lassos)
+
+**Context:** The puzzle's Lasso action required `lassosAvailable`, but there was no mechanism for the puzzle to consume lassos from the board resource pool.
+
+**Alternatives considered:**
+1. **Puzzle has its own lasso pool**: Separate from board lassos. Problem: confusing resource tracking.
+2. **Puzzle lasso consumes board lassos** (chosen): `BossPuzzleResult.lassosUsed` field, `onLassosUsed` callback, Game.ts decrements `this.lassos`.
+
+**Decision:** Added `lassosUsed: number` to `BossPuzzleResult`. `onLassosUsed` callback in Boss.ts fires during PuzzleResolve. Game.ts handler decrements `this.lassos`. Puzzle's `lassosAvailable` is set from `Game.lassos` at puzzle start via `onPuzzleStarting`.
+
+**Why:** Single lasso pool across board and puzzle phases. Player collects lassos on the board, spends them in the puzzle. Creates a resource economy across phases.
+
+### §9.5 — Cow pool model (each name = separate pool entry)
+
+**Context:** Original puzzle had 2 fixed cow names (Bessie, Clover) that cycled every encounter. Cows felt inexhaustible and encounters became repetitive.
+
+**Alternatives considered:**
+1. **Fixed 2 cows** (original): Same two cows every time. Problem: no variety, no sense of progression.
+2. **10-name pool, consumed per use** (chosen): Each cow name is tracked in `usedCowNames[]`. When a name is used (cow dynamited, shot, or lassoed), it's removed from the pool.
+3. **Random name from large pool each time**: Names don't persist. Problem: no consequence for killing cows.
+
+**Decision:** `assignEncounter()` builds a pool from un-consumed cow names (10 total) + 3 building types (outhouse, ranch_house, shed). Three items are drawn per encounter. When all 10 cow names are used, `grass` type joins the pool.
+
+**Why:** Makes cows a finite resource — early encounters have plenty of cows, later encounters have fewer, eventually only grass and buildings remain. The shrinking cow pool creates narrative tension ("I've scared off all the cows") and mechanical pressure (fewer cows = fewer lasso-able targets).
+
+### §9.6 — Grass type joins pool when cows exhausted
+
+**Context:** When all 10 cow names are consumed, the puzzle had no filler type for empty positions.
+
+**Alternatives considered:**
+1. **Null slot (no type)**: Position appears empty. Problem: confusing — player might think it's a bug or that Bill can't be there.
+2. **Always-visible empty slot**: Grayed out. Problem: telegraphs that it's not a valid hiding spot (too informative).
+3. **Grass type** (chosen): Draws as an open field with grass blades. Functions like a building (shooting/dynamiting it yields a miss + turn penalty).
+
+**Decision:** Grass type joins the pool when all 10 cow names are consumed. Buildings remain in the pool even when dynamited (cosmetic). Grass is always a miss.
+
+**Why:** Fills empty positions with a visual that reads as "open space" — Bill could theoretically be hiding there, but it's unlikely. The grass visual (green field with grass blades) creates variety from the brown dirt/sand of other positions. Grass is never a hit location (always miss + turn penalty).
+
+### §9.7 — Resource injection on BoardPhase enter
+
+**Context:** BoardPhase could start with zero cows and zero lassos on the board. This meant hearts were the only damage source (no cows to collect lassos from, no lassos to spend in puzzle).
+
+**Alternatives considered:**
+1. **Spawn cows at boss fight start only**: Initial spawn suffices. Problem: cows get cleared by row/column clears and cascade removals.
+2. **Guaranteed minimum cows/lassos each BoardPhase** (chosen): `ensureBoardResources()` fires via `onBoardPhaseEnter` callback — if cowCount < 2, spawn 1 cow + 1 lasso; if lassoCount < 1, spawn 1 lasso.
+3. **Infinite cows**: Respawn immediately on capture. Problem: too many cows, trivializes lasso collection.
+
+**Decision:** `Board.spawnCows(count)` made public. `Board.spawnLassos(count)` added. `Boss.onBoardPhaseEnter` callback fires on all 3 BoardPhase entries (Intro, post-Pattern, post-Puzzle). `Game.ensureBoardResources()` checks cow/lasso counts and injects if below thresholds.
+
+**Why:** Ensures the board always has actionable resources. Player can always collect lassos (via cow adjacency), always has lassos for puzzle Lasso action, and always has cows to maneuver. The threshold (cowCount < 2) prevents over-spawning while keeping the board active.
+
 ---
 
 ## §10. Bill the Rustler Puzzle Design
@@ -351,10 +428,57 @@
 
 **Why:** Multiple valid solutions prevent frustration (no "wrong answer" soft-lock) while rewarding skill. The narrative text gives each outcome character — the town's reaction changes based on your choices. This sets up the future "narrative consequence" system.
 
-### §10.2 — Cow/shed locations aligned with Western theme
+### §10.2 — Cow/shed locations aligned with Western theme (original)
 
 **Context:** Bill's cover spots needed to feel authentic to the "cattle rustler" character.
 
-**Decision:** Three locations: Bessie (cow), Clover (cow), Old Barn (shed). Bill telegraphs from one. Actions: Revolver (shoot the spot), Dynamite (explosive), Wait (catch his dynamite).
+**Decision (original):** Three locations: cows (Bessie, Clover), shed, outhouse, ranch house. Bill telegraphs from one.
 
-**Why:** The cow locations tie into the existing cow mechanic on the board — the boss fight board has 3 cows, and the puzzle shows 2 of them. This creates visual continuity. The barn adds environmental storytelling (this is a ranch). The "Wait" option teaches the player that patience can be a weapon — they catch Bill's own dynamite and turn it against him.
+**Why:** Cow locations tie into the existing cow mechanic on the board. Buildings add environmental storytelling. Locations expanded from 3 static to dynamic pool-based assignment.
+
+### §10.3 — Four actions in 2×2 grid (Dynamite, Revolver, Lasso, Hold)
+
+**Context:** Original puzzle had 3 actions (Revolver, Dynamite, Wait). Lasso resource from the board needed a spend path. Hold needed as a safe "skip" action.
+
+**Alternatives considered:**
+1. **3 actions** (original): Revolver, Dynamite, Wait. Problem: no lasso spend path.
+2. **4 actions in 2×2 grid** (chosen): Dynamite, Revolver (top row), Lasso, Hold (bottom row).
+3. **Add Lasso as 4th but keep 3-column layout**: Wouldn't fit in 3 columns; 2×2 is natural.
+
+**Decision:** 4 actions arranged as 2×2 grid. Top row: Dynamite, Revolver. Bottom row: Lasso, Hold. Lasso only enabled when a cow slot is selected and `lassosAvailable > 0`. Hold bypasses slot selection entirely.
+
+**Why:** 2×2 grid fits the action count naturally. Lasso gives the puzzle a direct connection to board resource collection. Hold gives the player a risk-free option when they can't decide — sets up future puzzle design where "waiting" has tradeoffs.
+
+### §10.4 — Cow pool: 10 names, consumed individually
+
+**Context:** Original had 2 cows that repeated. Addressed above in §9.5. Specific to puzzle: each cow slot draws from the global pool.
+
+**Decision:** Slot assignment picks 3 unique items from pool (un-consumed cow names + 3 buildings + grass when cows exhausted). Destroyed cow slots are blocked from receiving cow type. Used cow names are consumed permanently for the encounter.
+
+**Why:** Pool shrinkage creates variety and tension. Cow names disappearing signals progress through the fight. The block on destroyed slots prevents the weirdness of a ruined position somehow getting a cow again.
+
+### §10.5 — Grass type as fallback filler
+
+**Context:** When all 10 cow names are consumed, the pool would have only 3 building types — not enough to fill 3 positions with variety.
+
+**Alternatives considered:**
+1. **Only buildings**: Pool becomes [outhouse, ranch_house, shed] — always the same 3. Problem: repetitive.
+2. **Buildings + grass** (chosen): Grass joins when cows are depleted. Pool = [outhouse, ranch_house, shed, grass].
+3. **Recycle cow names**: Start using consumed names again. Problem: undermines the "finite resource" design.
+
+**Decision:** Grass type is added to pool when all 10 cow names have been used. Grass draws as an open field with grass blades. It's always a miss target (Bill can't hide in open grass).
+
+**Why:** Adds visual variety (green field vs. brown buildings). Provides a 4th pool item so slots aren't predictable. Grass being always-a-miss creates interesting decisions — if the telegraph points to grass, you know Bill's NOT there (he's at one of the other two positions), which narrows your choice.
+
+### §10.6 — Puzzle telegraph shortened to 1.5s
+
+**Context:** Original telegraph was 3.0s, which felt slow once players understood the puzzle mechanics.
+
+**Alternatives considered:**
+1. **Keep 3.0s** (original): Safe for first-timers. Problem: feels sluggish after 2-3 encounters.
+2. **Shorten to 1.5s** (chosen): Half the original duration.
+3. **Dynamic timing**: Longer on first encounter, shorter on repeats. Overengineered.
+
+**Decision:** `TELEGRAPH_DURATION = 1.5` (was 3.0). Resolve duration kept at 2.0s.
+
+**Why:** 3.0s gave too much reading time. By encounter 3, players know what a telegraph means. 1.5s keeps the puzzle snappy while giving enough time to read location labels and identify the red pulse. The resolve duration (2.0s) stays longer so players can read outcomes.

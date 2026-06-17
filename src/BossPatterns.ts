@@ -10,6 +10,7 @@ interface PatternState {
   handleClick(mx: number, my: number): void;
   get done(): boolean;
   get damage(): number;
+  get turnPenalty(): number;
   get name(): string;
 }
 
@@ -40,6 +41,7 @@ class FanFirePattern implements PatternState {
 
   get name(): string { return 'Fan Fire'; }
   get damage(): number { return this.hits; }
+  get turnPenalty(): number { return 3 - this.hits; }
   get done(): boolean { return this.phase === 'done'; }
 
   update(dt: number): void {
@@ -213,7 +215,8 @@ class DynamiteTossPattern implements PatternState {
   }
 
   get name(): string { return 'Dynamite Toss'; }
-  get damage(): number { return this.hit ? 2 : 0; }
+  get damage(): number { return this.hit ? 1 : 0; }
+  get turnPenalty(): number { return this.hit ? 0 : 1; }
   get done(): boolean { return this.phase === 'done'; }
 
   private getArcPos(t: number): { x: number; y: number } {
@@ -226,14 +229,14 @@ class DynamiteTossPattern implements PatternState {
     this.timer += dt;
     switch (this.phase) {
       case 'telegraph':
-        if (this.timer >= 0.7) {
+        if (this.timer >= 1.0) {
           this.phase = 'active';
           this.timer = 0;
         }
         break;
       case 'active': {
-        this.arcProgress = Math.min(this.timer / 1.0, 1);
-        if (this.timer >= 1.2) {
+        this.arcProgress = Math.min(this.timer / 3.0, 1);
+        if (this.timer >= 3.5) {
           this.phase = 'resolve';
           this.timer = 0;
         }
@@ -393,7 +396,8 @@ class QuickDrawPattern implements PatternState {
   }
 
   get name(): string { return 'Quick Draw'; }
-  get damage(): number { return this.hit ? 2 : 0; }
+  get damage(): number { return this.hit ? 1 : 0; }
+  get turnPenalty(): number { return this.hit ? 0 : 1; }
   get done(): boolean { return this.phase === 'done'; }
 
   update(dt: number): void {
@@ -542,7 +546,8 @@ class ReloadWindowPattern implements PatternState {
   }
 
   get name(): string { return 'Reload Window'; }
-  get damage(): number { return Math.min(this.clicks * 0.5, 4); }
+  get damage(): number { return this.clicks > 0 ? 1 : 0; }
+  get turnPenalty(): number { return this.clicks > 0 ? 0 : 1; }
   get done(): boolean { return this.phase === 'done'; }
 
   update(dt: number): void {
@@ -704,10 +709,6 @@ export class PatternManager {
     if (this.current && !this.current.done) {
       this.current.update(dt);
     }
-    // Auto-clear when done
-    if (this.current?.done) {
-      this.current = null;
-    }
   }
 
   handleClick(mx: number, my: number): void {
@@ -724,5 +725,16 @@ export class PatternManager {
 
   get damage(): number {
     return this.current?.damage ?? 0;
+  }
+
+  get turnPenalty(): number {
+    return this.current?.turnPenalty ?? 0;
+  }
+
+  consumeResult(): { damage: number; turnPenalty: number } {
+    const dmg = this.current?.damage ?? 0;
+    const tp = this.current?.turnPenalty ?? 0;
+    this.current = null;
+    return { damage: dmg, turnPenalty: tp };
   }
 }

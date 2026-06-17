@@ -111,7 +111,7 @@ export class Board {
     this.pieces.push(lasso);
   }
 
-  private spawnCows(count: number): void {
+  spawnCows(count: number): void {
     let placed = 0;
     let attempts = 0;
     while (placed < count && attempts < 100) {
@@ -155,6 +155,29 @@ export class Board {
       this.pieces.push(heart);
       placed++;
     }
+  }
+
+  spawnLassos(count: number): void {
+    let placed = 0;
+    let attempts = 0;
+    while (placed < count && attempts < 100) {
+      const c = Math.floor(Math.random() * this.cols);
+      const r = Math.floor(Math.random() * this.rows);
+      if (!this.grid[r][c]) { attempts++; continue; }
+      if (this.grid[r][c].type === LASSO_TYPE) { attempts++; continue; }
+      if (this.grid[r][c].type === COW_TYPE) { attempts++; continue; }
+      if (this.wouldMatchSurroundings(c, r, LASSO_TYPE)) { attempts++; continue; }
+      this.grid[r][c].removeProgress = 1;
+      this.grid[r][c].removing = true;
+      const lasso = new Piece(c, r, LASSO_TYPE);
+      this.grid[r][c] = lasso;
+      this.pieces.push(lasso);
+      placed++;
+    }
+  }
+
+  get lassoCount(): number {
+    return this.pieces.filter(p => p.type === LASSO_TYPE && !p.removing).length;
   }
 
   private wouldMatchSurroundings(c: number, r: number, t: number): boolean {

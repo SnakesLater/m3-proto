@@ -341,11 +341,14 @@ Intro (1.5s) → BoardPhase → (3 moves) → PatternPhase → (pattern ends, da
 | Source | Amount | Trigger |
 |--------|--------|---------|
 | Heart adjacency pop | 1 | BoardPhase, any match near heart |
-| Pattern: Fan Fire | hits (0-3) | PatternPhase end |
-| Pattern: Dynamite Toss | 2 if hit, 0 if miss | PatternPhase end |
-| Pattern: Quick Draw | 2 if hit, 0 if miss | PatternPhase end |
-| Pattern: Reload Window | clicks × 0.5 (max 4) | PatternPhase end |
-| Puzzle resolution | Varies by puzzle | PuzzleResolve state |
+| Pattern: Fan Fire | hits (0-3) + turn penalty (3-hits) | PatternPhase end via `consumeResult()` |
+| Pattern: Dynamite Toss | 1 if hit, 0 if miss + 1 turn penalty if miss | PatternPhase end via `consumeResult()` |
+| Pattern: Quick Draw | 1 if hit, 0 if miss + 1 turn penalty if miss | PatternPhase end via `consumeResult()` |
+| Pattern: Reload Window | 1 if any clicks, 0 if none + 1 turn penalty if none | PatternPhase end via `consumeResult()` |
+| Puzzle resolution (Bill dynamite direct hit) | 10 | PuzzleResolve state, dynamite on Bill's slot |
+| Puzzle resolution (Bill revolver/lasso hit) | 2 | PuzzleResolve state |
+| Puzzle resolution (Bill grazing hit) | 1 + 1 turn penalty | PuzzleResolve state, revolver on cow, 30% chance |
+| Puzzle resolution (miss) | 0 + 1 turn penalty | PuzzleResolve state, wrong slot/action |
 
 ### Patterns Detail
 
@@ -355,28 +358,28 @@ See `src/BossPatterns.ts` for complete implementation.
 - Telegraph (0.8s): red lines from boss to 3 positions
 - Active: 3 circles appear left-to-right, 0.5s each to click, 0.7s total per lane
 - Hit detection: 50px radius
-- Damage: 1 per hit (max 3)
+- Damage: 1 per hit (max 3); Turn penalty: 1 per miss (max 3)
 - Resolve (1.0s): show result
 
 **Dynamite Toss** (`src/BossPatterns.ts:188-372`):
-- Telegraph (0.7s): spark particles at origin
-- Active (1.2s): dynamite arcs across screen on quadratic bezier curve
-- Can only click between 25%-75% arc progress
+- Telegraph (1.0s): spark particles at origin
+- Active (3.0s): dynamite arcs across screen on quadratic bezier curve
+- Can only click between 25%-75% arc progress; timeout at 3.5s
 - Hit detection: 60px radius
-- Damage: 2 if hit
+- Damage: 1 if hit; Turn penalty: 1 if miss
 - Resolve (0.8s): show result
 
 **Quick Draw** (`src/BossPatterns.ts:376-528`):
 - Telegraph (1.2s): crosshair drifts erratically with sine-based movement
 - Active (0.65s): "DRAW!" flash, click crosshair within 50px radius
-- Damage: 2 if hit
+- Damage: 1 if hit; Turn penalty: 1 if miss
 - Resolve (0.8s): show result
 
 **Reload Window** (`src/BossPatterns.ts:532-642`):
 - Telegraph (0.3s): "Boss is reloading..." notice
-- Active (2.0s): click rapidly, each click = 0.5 damage, max 8 clicks
+- Active (2.0s): click rapidly, need at least 1 click for hit
 - Progress bar shows remaining time
-- Damage: min(clicks × 0.5, 4)
+- Damage: 1 if any clicks; Turn penalty: 1 if no clicks
 - Resolve (0.8s): show result
 
 ### Pattern Selection
@@ -499,20 +502,50 @@ interface BossPuzzle {
 ### Bill the Rustler Puzzle (`src/BillRustlerPuzzle.ts`)
 The first puzzle boss. Bill hides behind cattle near a barn. The player sees 3 locations and must choose their approach.
 
+**Cow Pool Model:**
+- 10 cow names (`src/BillRustlerPuzzle.ts:10-14`)
+- Each encounter draws 3 unique items from: un-consumed cow names + 3 buildings (outhouse, ranch_house, shed)
+- When all 10 cow names consumed, `grass` type joins the pool
+- `usedCowNames[]` tracks consumed names; destroyed cow slots blocked from future cow type
+- Buildings always in pool (cosmetic ruins when dynamited)
+- Telegraph: red pulse on one slot (may or may not be Bill's real position — 50% truthful)
+
+**Slot Types:**
+| Type | Visual | Behavior |
+|------|--------|----------|
+| Cow | Cow icon + name (e.g., "Bessie") | Can be lassoed; cow name consumed on shoot/lasso/dynamite |
+| Grass | Open field with grass blades | Always a miss (Bill can't hide in open) |
+| Outhouse | Wooden outhouse | Building; miss if wrong slot |
+| Ranch House | Red ranch house | Building; miss if wrong slot |
+| Shed | Barn/shed | Building; miss if wrong slot |
+| Ruins | Destroyed building variant | Cosmetic only; miss if targeted |
+
 **Phases:**
-1. **Telegraph** (1.5s): 3 locations shown — Bessie (cow), Clover (cow), Old Barn (shed). A red pulse indicates where Bill is hiding.
-2. **Choice** (player input): 3 action buttons — **Revolver**, **Dynamite**, **Wait...**
-3. **Resolve** (2.0s): Outcome displayed with narrative text.
+1. **Telegraph** (1.5s): 3 locations shown. Red pulse on one spot (may be bait). `TELEGRAPH_DURATION = 1.5`.
+2. **Choice** (player input): 4 action buttons in 2×2 grid:
+   - **Dynamite** (top-left): Always available. 10 boss damage on Bill's slot.
+   - **Revolver** (top-right): Always available. 2 boss damage on Bill's slot (70% on cow, else grazing).
+   - **Lasso** (bottom-left): Only on cow slots with `lassosAvailable > 0`. 2 boss damage on Bill's slot.
+   - **Hold** (bottom-right): Always available. Bypasses slot selection. 0 damage, 0 turn penalty.
+3. **Resolve** (2.0s): Outcome displayed with narrative text, damage, score, turn penalty, lassos used.
 
-**Outcomes by choice:**
+**Outcomes detail (all possibilities):**
 
-| Choice | Bill at Cow | Bill at Shed |
-|--------|-------------|--------------|
-| **Revolver** | +1 boss dmg, cow scares off (rep hit) | Miss, player takes 1 damage |
-| **Dynamite** | +1 boss dmg, cow killed (bad rep) | +2 boss dmg, shed destroyed |
-| **Wait...** | +2 boss dmg, catch dynamite, scare cows (best) | +2 boss dmg, catch dynamite, save shed (best) |
+| Scenario | bossDamage | turnPenalty | lassosUsed | Notes |
+|----------|-----------|-------------|------------|-------|
+| Hold (any) | 0 | 0 | 0 | Safe skip |
+| Dynamite on Bill | 10 | 0 | 0 | Direct hit; slot destroyed |
+| Dynamite on Bill (already destroyed) | 2 | 0 | 0 | Easy shot on exposed position |
+| Dynamite on wrong slot | 0 | 1 | 0 | Slot destroyed; cow name consumed |
+| Revolver on Bill (cow slot, 70%) | 2 | 0 | 0 | Clean hit through cow |
+| Revolver on Bill (cow slot, 30%) | 1 | 1 | 0 | Cow deflects; grazing hit |
+| Revolver on Bill (building/grass) | 2 | 0 | 0 | Cold shot |
+| Revolver on wrong cow slot | 0 | 1 | 0 | Cow bolts; name consumed |
+| Revolver on wrong building/grass | 0 | 1 | 0 | Empty |
+| Lasso on Bill (cow) | 2 | 0 | 1 | Lasso through cow |
+| Lasso on wrong cow | 0 | 0 | 1 | Lassoed wrong one; name consumed |
 
-**Design pattern:** Multiple valid solutions with tradeoffs. The player can succeed with any choice but the "best" outcome requires reading the telegraph and choosing Wait (hardest execution, best reward).
+**Design pattern:** Multiple valid solutions with tradeoffs. The player can succeed with any choice but the "best" outcome (Dynamite 10 damage) requires identifying Bill's position and choosing correctly. Hold gives a safe reset. Lasso connects board resource to puzzle.
 
 ### Future Boss Design Pattern
 Each puzzle boss should define:

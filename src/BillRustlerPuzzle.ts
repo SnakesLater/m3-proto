@@ -4,7 +4,7 @@ import { CONFIG } from './config';
 const W = CONFIG.canvas.width;
 const H = CONFIG.canvas.height;
 
-const TELEGRAPH_DURATION = 3.0;
+const TELEGRAPH_DURATION = 1.5;
 const RESOLVE_DURATION = 2.0;
 
 const COW_NAMES = [
@@ -13,10 +13,10 @@ const COW_NAMES = [
   'Penny', 'Ruby',
 ];
 
-type SlotType = 'cow' | 'outhouse' | 'ranch_house' | 'shed';
-type ActionId = 'revolver' | 'dynamite';
+type SlotType = 'cow' | 'grass' | 'outhouse' | 'ranch_house' | 'shed';
+type ActionId = 'revolver' | 'dynamite' | 'lasso' | 'hold';
 
-const ALL_TYPES: SlotType[] = ['cow', 'outhouse', 'ranch_house', 'shed'];
+const ALL_TYPES: SlotType[] = ['cow', 'outhouse', 'ranch_house', 'shed', 'grass'];
 
 interface PositionDef {
   x: number;
@@ -41,6 +41,8 @@ enum PuzzleState {
   Done,
 }
 
+const EMPTY_RESULT: BossPuzzleResult = { bossDamage: 0, playerDamage: 0, scoreBonus: 0, narrativeLine: '', turnPenalty: 0, lassosUsed: 0 };
+
 export class BillRustlerPuzzle implements BossPuzzle {
   readonly name = 'Bill the Rustler';
   private state = PuzzleState.Telegraph;
@@ -48,8 +50,10 @@ export class BillRustlerPuzzle implements BossPuzzle {
   private selectedSlot = -1;
   private chosenAction: ActionId | null = null;
   private _done = false;
-  private _result: BossPuzzleResult = { bossDamage: 0, playerDamage: 0, scoreBonus: 0, narrativeLine: '', turnPenalty: 0 };
+  private _result: BossPuzzleResult = { ...EMPTY_RESULT };
   private _hasResult = false;
+
+  lassosAvailable = 0;
 
   private readonly positions: PositionDef[] = [
     { x: 60, y: 200, w: 220, h: 200 },
@@ -58,8 +62,10 @@ export class BillRustlerPuzzle implements BossPuzzle {
   ];
 
   private readonly actions: ActionDef[] = [
-    { id: 'dynamite', label: 'Dynamite', x: 280, y: 470, w: 200, h: 50 },
-    { id: 'revolver', label: 'Revolver', x: 480, y: 470, w: 200, h: 50 },
+    { id: 'dynamite', label: 'Dynamite', x: 280, y: 460, w: 200, h: 45 },
+    { id: 'revolver', label: 'Revolver', x: 480, y: 460, w: 200, h: 45 },
+    { id: 'lasso', label: 'Lasso', x: 280, y: 515, w: 200, h: 45 },
+    { id: 'hold', label: 'Hold', x: 480, y: 515, w: 200, h: 45 },
   ];
 
   posTypes: (SlotType | null)[] = [null, null, null];
@@ -74,70 +80,67 @@ export class BillRustlerPuzzle implements BossPuzzle {
   get result(): BossPuzzleResult { return this._result; }
 
   private assignEncounter(): void {
-    const alive = this.posDestroyed.map((d, i) => d ? -1 : i).filter(i => i >= 0);
+    const poolItems: string[] = [];
 
-    if (alive.length === 0) {
-      this._result = {
-        bossDamage: 2,
-        playerDamage: 0,
-        scoreBonus: 0,
-        narrativeLine: 'Bill has nowhere left to hide! You take the free shot.',
-        turnPenalty: 0,
-      };
-      this._hasResult = true;
-      this.state = PuzzleState.Resolve;
-      this.timer = 0;
-      return;
+    for (const name of COW_NAMES) {
+      if (!this.usedCowNames.includes(name)) {
+        poolItems.push(`cow:${name}`);
+      }
     }
 
-    const pool = [...ALL_TYPES];
-    for (let i = 0; i < alive.length; i++) {
-      const idx = Math.floor(Math.random() * pool.length);
-      this.posTypes[alive[i]] = pool.splice(idx, 1)[0];
+    const hasCows = poolItems.filter(p => p.startsWith('cow:')).length > 0;
+
+    poolItems.push('outhouse');
+    poolItems.push('ranch_house');
+    poolItems.push('shed');
+
+    if (!hasCows) {
+      poolItems.push('grass');
     }
 
-    for (const i of alive) {
-      if (this.posTypes[i] === 'cow') {
-        const unused = COW_NAMES.filter(n => !this.usedCowNames.includes(n));
-        if (unused.length > 0) {
-          const name = unused[Math.floor(Math.random() * unused.length)];
-          this.posCowNames[i] = name;
+    for (let i = poolItems.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [poolItems[i], poolItems[j]] = [poolItems[j], poolItems[i]];
+    }
+
+    const remaining = [...poolItems];
+
+    for (let i = 0; i < 3; i++) {
+      const valid = remaining.filter(item => {
+        if (item.startsWith('cow:') && this.posDestroyed[i]) return false;
+        return true;
+      });
+
+      if (valid.length > 0) {
+        const chosen = valid[Math.floor(Math.random() * valid.length)];
+        const idx = remaining.indexOf(chosen);
+        remaining.splice(idx, 1);
+
+        if (chosen.startsWith('cow:')) {
+          this.posTypes[i] = 'cow';
+          this.posCowNames[i] = chosen.slice(4);
+        } else if (chosen === 'grass') {
+          this.posTypes[i] = 'grass';
+          this.posCowNames[i] = null;
         } else {
-          this.posTypes[i] = null;
-          this.posDestroyed[i] = true;
+          this.posTypes[i] = chosen as SlotType;
+          this.posCowNames[i] = null;
         }
       } else {
+        this.posTypes[i] = null;
         this.posCowNames[i] = null;
       }
     }
 
-    const stillAlive = this.posDestroyed.map((d, i) => d ? -1 : i).filter(i => i >= 0);
-
-    if (stillAlive.length === 0) {
-      this._result = {
-        bossDamage: 2,
-        playerDamage: 0,
-        scoreBonus: 0,
-        narrativeLine: 'All hiding spots are gone! Bill is exposed.',
-        turnPenalty: 0,
-      };
-      this._hasResult = true;
-      this.state = PuzzleState.Resolve;
-      this.timer = 0;
-      return;
-    }
-
-    this.billPosition = stillAlive[Math.floor(Math.random() * stillAlive.length)];
+    this.billPosition = Math.floor(Math.random() * 3);
 
     if (Math.random() < 0.5) {
       this.telegraphPosition = this.billPosition;
     } else {
-      const others = stillAlive.filter(i => i !== this.billPosition);
-      if (others.length > 0) {
-        this.telegraphPosition = others[Math.floor(Math.random() * others.length)];
-      } else {
-        this.telegraphPosition = this.billPosition;
-      }
+      const others = [0, 1, 2].filter(i => i !== this.billPosition);
+      this.telegraphPosition = others.length > 0
+        ? others[Math.floor(Math.random() * others.length)]
+        : this.billPosition;
     }
   }
 
@@ -148,6 +151,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
     this.chosenAction = null;
     this._done = false;
     this._hasResult = false;
+    this._result = { ...EMPTY_RESULT };
 
     this.posTypes = [null, null, null];
     this.posCowNames = [null, null, null];
@@ -177,6 +181,29 @@ export class BillRustlerPuzzle implements BossPuzzle {
   handleClick(mx: number, my: number): boolean {
     if (this.state !== PuzzleState.Choice) return false;
 
+    for (const a of this.actions) {
+      if (mx < a.x || mx > a.x + a.w || my < a.y || my > a.y + a.h) continue;
+
+      if (a.id === 'hold') {
+        this.chosenAction = 'hold';
+        this.selectedSlot = -1;
+        this.resolve();
+        this.state = PuzzleState.Resolve;
+        this.timer = 0;
+        return true;
+      }
+
+      if (this.selectedSlot < 0) return false;
+
+      if (a.id === 'lasso' && !this.canLasso()) return true;
+
+      this.chosenAction = a.id;
+      this.resolve();
+      this.state = PuzzleState.Resolve;
+      this.timer = 0;
+      return true;
+    }
+
     for (let i = 0; i < this.positions.length; i++) {
       const p = this.positions[i];
       if (mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h) {
@@ -185,23 +212,31 @@ export class BillRustlerPuzzle implements BossPuzzle {
       }
     }
 
-    if (this.selectedSlot >= 0) {
-      for (const a of this.actions) {
-        if (mx >= a.x && mx <= a.x + a.w && my >= a.y && my <= a.y + a.h) {
-          this.chosenAction = a.id;
-          this.resolve();
-          this.state = PuzzleState.Resolve;
-          this.timer = 0;
-          return true;
-        }
-      }
-    }
-
     return false;
+  }
+
+  private canLasso(): boolean {
+    if (this.lassosAvailable <= 0) return false;
+    if (this.selectedSlot < 0) return false;
+    return this.posTypes[this.selectedSlot] === 'cow' && !this.posDestroyed[this.selectedSlot];
   }
 
   private resolve(): void {
     const action = this.chosenAction!;
+
+    if (action === 'hold') {
+      this._result = {
+        bossDamage: 0,
+        playerDamage: 0,
+        scoreBonus: 0,
+        narrativeLine: 'You hold your position and observe...',
+        turnPenalty: 0,
+        lassosUsed: 0,
+      };
+      this._hasResult = true;
+      return;
+    }
+
     const slot = this.selectedSlot;
     const destroyed = this.posDestroyed[slot];
     const type = this.posTypes[slot];
@@ -214,13 +249,22 @@ export class BillRustlerPuzzle implements BossPuzzle {
           scoreBonus: 50,
           narrativeLine: 'Bill is exposed in the open! Easy shot.',
           turnPenalty: 0,
+          lassosUsed: 0,
+        };
+      } else if (action === 'lasso') {
+        this.usedCowNames.push(this.posCowNames[slot] || '');
+        this._result = {
+          bossDamage: 2,
+          playerDamage: 0,
+          scoreBonus: 100,
+          narrativeLine: `You lasso Bill through ${this.posCowNames[slot] || 'the cow'}!`,
+          turnPenalty: 0,
+          lassosUsed: 1,
         };
       } else if (action === 'dynamite') {
         this.posDestroyed[slot] = true;
         if (type === 'cow') {
-          for (let i = 0; i < this.posDestroyed.length; i++) {
-            if (this.posTypes[i] === 'cow') this.posDestroyed[i] = true;
-          }
+          this.usedCowNames.push(this.posCowNames[slot] || '');
         }
         this._result = {
           bossDamage: 10,
@@ -228,6 +272,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
           scoreBonus: 100,
           narrativeLine: 'Dynamite at his feet! Bill takes a massive blast.',
           turnPenalty: 0,
+          lassosUsed: 0,
         };
       } else if (type === 'cow') {
         const hitBill = Math.random() < 0.7;
@@ -238,6 +283,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
             scoreBonus: 100,
             narrativeLine: `You nail Bill through the ${this.posCowNames[slot] || 'cow'}! Clean hit.`,
             turnPenalty: 0,
+            lassosUsed: 0,
           };
         } else {
           this.usedCowNames.push(this.posCowNames[slot] || '');
@@ -247,6 +293,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
             scoreBonus: 0,
             narrativeLine: `The ${this.posCowNames[slot] || 'cow'} deflects your shot! Bill is grazed.`,
             turnPenalty: 1,
+            lassosUsed: 0,
           };
         }
       } else {
@@ -256,15 +303,24 @@ export class BillRustlerPuzzle implements BossPuzzle {
           scoreBonus: 100,
           narrativeLine: 'Your shot finds Bill cold!',
           turnPenalty: 0,
+          lassosUsed: 0,
         };
       }
     } else {
-      if (action === 'dynamite') {
+      if (action === 'lasso') {
+        this.usedCowNames.push(this.posCowNames[slot] || '');
+        this._result = {
+          bossDamage: 0,
+          playerDamage: 0,
+          scoreBonus: 0,
+          narrativeLine: `${this.posCowNames[slot] || 'The cow'} is lassoed. Bill's not here.`,
+          turnPenalty: 0,
+          lassosUsed: 1,
+        };
+      } else if (action === 'dynamite') {
         this.posDestroyed[slot] = true;
         if (type === 'cow') {
-          for (let i = 0; i < this.posDestroyed.length; i++) {
-            if (this.posTypes[i] === 'cow') this.posDestroyed[i] = true;
-          }
+          this.usedCowNames.push(this.posCowNames[slot] || '');
         }
         const noun = type === 'cow'
           ? 'cow field'
@@ -272,13 +328,16 @@ export class BillRustlerPuzzle implements BossPuzzle {
             ? 'outhouse'
             : type === 'ranch_house'
               ? 'ranch house'
-              : 'barn';
+              : type === 'grass'
+                ? 'open field'
+                : 'barn';
         this._result = {
           bossDamage: 0,
           playerDamage: 0,
           scoreBonus: 0,
           narrativeLine: `The ${noun} is destroyed! Bill wasn't there.`,
           turnPenalty: 1,
+          lassosUsed: 0,
         };
       } else {
         if (type === 'cow') {
@@ -289,6 +348,16 @@ export class BillRustlerPuzzle implements BossPuzzle {
             scoreBonus: 0,
             narrativeLine: `The ${this.posCowNames[slot] || 'cow'} bolts! Bill's not here.`,
             turnPenalty: 1,
+            lassosUsed: 0,
+          };
+        } else if (type === 'grass') {
+          this._result = {
+            bossDamage: 0,
+            playerDamage: 0,
+            scoreBonus: 0,
+            narrativeLine: 'The open field is empty. Bill\'s not here.',
+            turnPenalty: 1,
+            lassosUsed: 0,
           };
         } else if (type === 'shed') {
           this._result = {
@@ -297,6 +366,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
             scoreBonus: 0,
             narrativeLine: 'The barn is empty. Bill\'s not here.',
             turnPenalty: 1,
+            lassosUsed: 0,
           };
         } else if (type === 'ranch_house') {
           this._result = {
@@ -305,6 +375,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
             scoreBonus: 0,
             narrativeLine: 'The ranch house is quiet. Bill\'s playing games.',
             turnPenalty: 1,
+            lassosUsed: 0,
           };
         } else {
           this._result = {
@@ -313,6 +384,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
             scoreBonus: 0,
             narrativeLine: 'The outhouse is empty. Nice try.',
             turnPenalty: 1,
+            lassosUsed: 0,
           };
         }
       }
@@ -334,9 +406,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
 
     if (this.state === PuzzleState.Choice) {
       this.drawPrompt(ctx);
-      if (this.selectedSlot >= 0) {
-        this.drawActions(ctx);
-      }
+      this.drawActions(ctx);
     }
 
     if (this.state === PuzzleState.Resolve) {
@@ -356,13 +426,14 @@ export class BillRustlerPuzzle implements BossPuzzle {
       const destroyed = this.posDestroyed[this.selectedSlot];
       const name = destroyed ? 'the ruins' : (
         type === 'cow' ? (this.posCowNames[this.selectedSlot] || 'a cow') :
+        type === 'grass' ? 'the open field' :
         type === 'shed' ? 'the barn' :
         type === 'ranch_house' ? 'the ranch house' :
         'the outhouse'
       );
-      ctx.fillText(`Targeting ${name} — pick your weapon:`, W / 2, 440);
+      ctx.fillText(`Targeting ${name} — pick your weapon:`, W / 2, 435);
     } else {
-      ctx.fillText('Click a spot to target:', W / 2, 440);
+      ctx.fillText('Click a spot to target, or Hold to pass:', W / 2, 435);
     }
   }
 
@@ -397,6 +468,8 @@ export class BillRustlerPuzzle implements BossPuzzle {
         this.drawDestroyedSlot(ctx, pos, type, hasBill);
       } else if (type === 'cow') {
         this.drawCowSlot(ctx, pos, this.posCowNames[i] || 'cow');
+      } else if (type === 'grass') {
+        this.drawOpenField(ctx, pos, hasBill);
       } else if (type === 'shed') {
         this.drawBuildingSlot(ctx, pos, 'Old Barn', false);
       } else if (type === 'ranch_house') {
@@ -442,6 +515,33 @@ export class BillRustlerPuzzle implements BossPuzzle {
       '— EMPTY —'
     );
     ctx.fillText(caption, pos.x + pos.w / 2, pos.y + pos.h - 15);
+  }
+
+  private drawOpenField(ctx: CanvasRenderingContext2D, pos: PositionDef, hasBill: boolean): void {
+    const cx = pos.x + pos.w / 2;
+    const cy = pos.y + pos.h / 2;
+
+    ctx.fillStyle = '#3a6b35';
+    ctx.fillRect(cx - 80, cy - 50, 160, 100);
+
+    ctx.fillStyle = '#4a8b45';
+    for (let i = 0; i < 16; i++) {
+      const gx = cx - 70 + Math.random() * 140;
+      const gy = cy - 40 + Math.random() * 80;
+      ctx.fillRect(gx, gy, 3, 8 + Math.random() * 6);
+    }
+
+    ctx.fillStyle = '#5c3a21';
+    ctx.font = 'bold 14px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('Open Field', cx, pos.y + 30);
+
+    if (hasBill) {
+      this.drawBillSilhouette(ctx, cx, cy);
+      ctx.fillStyle = '#ff6666';
+      ctx.font = 'bold 12px Courier New';
+      ctx.fillText('HOSTILE SPOTTED', cx, pos.y + pos.h - 15);
+    }
   }
 
   private drawCowSlot(ctx: CanvasRenderingContext2D, pos: PositionDef, name: string): void {
@@ -696,15 +796,27 @@ export class BillRustlerPuzzle implements BossPuzzle {
     ctx.textAlign = 'center';
 
     for (const a of this.actions) {
-      const bgColor = a.id === 'dynamite' ? '#8b4513' : '#5c3a21';
-      ctx.fillStyle = bgColor;
+      const isLasso = a.id === 'lasso';
+      const isHold = a.id === 'hold';
+      let enabled = false;
+
+      if (isHold) {
+        enabled = true;
+      } else if (isLasso) {
+        enabled = this.canLasso();
+      } else {
+        enabled = this.selectedSlot >= 0;
+      }
+
+      ctx.fillStyle = !enabled ? '#333' : (a.id === 'dynamite' ? '#8b4513' : '#5c3a21');
       ctx.fillRect(a.x, a.y, a.w, a.h);
-      ctx.strokeStyle = '#8b6914';
+      ctx.strokeStyle = enabled ? '#8b6914' : '#555';
       ctx.lineWidth = 2;
       ctx.strokeRect(a.x, a.y, a.w, a.h);
 
-      ctx.fillStyle = '#ffd700';
-      ctx.fillText(a.label, a.x + a.w / 2, a.y + 32);
+      ctx.fillStyle = enabled ? '#ffd700' : '#666';
+      const label = isLasso ? `Lasso (${this.lassosAvailable})` : a.label;
+      ctx.fillText(label, a.x + a.w / 2, a.y + 28);
     }
   }
 
@@ -716,7 +828,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
     ctx.font = 'bold 28px Courier New';
     ctx.textAlign = 'center';
 
-    const text = this._result.bossDamage > 0 ? 'HIT!' : 'MISS!';
+    const text = this._result.bossDamage > 0 ? 'HIT!' : (this._result.lassosUsed > 0 ? 'Lasso!' : 'MISS!');
     ctx.fillText(text, W / 2, H / 2 - 80);
 
     ctx.fillStyle = '#fff';
@@ -738,6 +850,12 @@ export class BillRustlerPuzzle implements BossPuzzle {
       ctx.fillStyle = '#ff6644';
       ctx.font = 'bold 16px Courier New';
       ctx.fillText(`-${this._result.turnPenalty} Turn`, W / 2, H / 2 + 90);
+    }
+
+    if (this._result.lassosUsed > 0) {
+      ctx.fillStyle = '#c49a6c';
+      ctx.font = 'bold 16px Courier New';
+      ctx.fillText(`Lassos Used: ${this._result.lassosUsed}`, W / 2, H / 2 + 120);
     }
   }
 }

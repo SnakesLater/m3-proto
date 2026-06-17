@@ -4,6 +4,7 @@ export interface BossPuzzleResult {
   scoreBonus: number;
   narrativeLine: string;
   turnPenalty: number;
+  lassosUsed: number;
 }
 
 export interface BossPuzzle {
