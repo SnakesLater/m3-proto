@@ -152,7 +152,6 @@ export class BossFight {
         break;
 
       case BossState.PuzzleResolve:
-        this.timer += dt;
         if (this.timer >= CONFIG.puzzle.resolveDuration) {
           this.state = BossState.PuzzleExit;
           this.targetViewShift = 0;

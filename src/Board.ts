@@ -321,8 +321,6 @@ export class Board {
     const p = this.grid[r][c];
     if (!p || p.removing) return;
 
-    if (p.type === LASSO_TYPE) return;
-
     if (!this.selected) {
       this.selected = p;
       p.selected = true;
@@ -387,7 +385,7 @@ export class Board {
   }
 
   private canMatchType(type: number): boolean {
-    return !this.isSpecialType(type);
+    return !this.isSpecialType(type) || type === LASSO_TYPE;
   }
 
   private findMatches(): Piece[] {
@@ -654,6 +652,11 @@ export class Board {
             p.removeProgress = 1;
           }
           this.addLassoFromCowProximity(this.matchedPieces);
+          for (const p of this.matchedPieces) {
+            if (p.type === LASSO_TYPE && this.onLassoCollected) {
+              this.onLassoCollected();
+            }
+          }
           const hadHearts = this.matchedPieces.some(p => p.type === HEART_TYPE);
           if (this.onMatch) this.onMatch(this.matchedPieces, effects);
           if (hadHearts && this.onHeartMatched) this.onHeartMatched();
@@ -688,7 +691,7 @@ export class Board {
               this.spawnSingleCow();
               this.collectBottomCows();
             }
-            if (!this.isBossLevel && this.isDeadlocked()) {
+            if (this.isDeadlocked()) {
               this.reshuffle();
             }
           }
