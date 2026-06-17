@@ -4,7 +4,13 @@ import { CONFIG } from './config';
 const W = CONFIG.canvas.width;
 const H = CONFIG.canvas.height;
 
-type LocationId = 'cow_left' | 'cow_right' | 'shed';
+const COW_NAMES = [
+  'Bessie', 'Clover', 'Daisy', 'Buttercup',
+  'Mabel', 'Hazel', 'Maple', 'Willow',
+  'Penny', 'Ruby',
+];
+
+type LocationId = 'cow_left' | 'cow_right' | 'shed' | 'open_ground';
 type ActionId = 'revolver' | 'dynamite' | 'wait';
 
 interface LocationDef {
@@ -27,7 +33,8 @@ interface ActionDef {
 
 enum PuzzleState {
   Telegraph,
-  Choice,
+  LocationChoice,
+  ActionChoice,
   Resolve,
   Done,
 }
@@ -41,10 +48,15 @@ export class BillRustlerPuzzle implements BossPuzzle {
   private _done = false;
   private _result: BossPuzzleResult = { bossDamage: 0, playerDamage: 0, scoreBonus: 0, narrativeLine: '' };
   private _hasResult = false;
+  private destroyedLocations: Set<LocationId> = new Set();
+  private cowNameMap: Map<LocationId, string> = new Map();
+  private billLocation: LocationId = 'cow_left';
+  private selectedLocation: LocationId | null = null;
+  private encounterCount = 0;
 
   private readonly locations: LocationDef[] = [
-    { id: 'cow_left', label: 'Bessie', x: 60, y: 200, w: 220, h: 200 },
-    { id: 'cow_right', label: 'Clover', x: 370, y: 200, w: 220, h: 200 },
+    { id: 'cow_left', label: '', x: 60, y: 200, w: 220, h: 200 },
+    { id: 'cow_right', label: '', x: 370, y: 200, w: 220, h: 200 },
     { id: 'shed', label: 'Old Barn', x: 680, y: 200, w: 220, h: 200 },
   ];
 
@@ -54,18 +66,62 @@ export class BillRustlerPuzzle implements BossPuzzle {
     { id: 'wait', label: 'Wait...', x: 740, y: 470, w: 160, h: 50 },
   ];
 
+  private readonly openGroundLoc: LocationDef = {
+    id: 'open_ground',
+    label: 'Open Ground',
+    x: 200, y: 220, w: 560, h: 160,
+  };
+
   get done(): boolean { return this._done; }
   get hasResult(): boolean { return this._hasResult; }
   get result(): BossPuzzleResult { return this._result; }
 
+  private getAliveLocations(): LocationId[] {
+    const all: LocationId[] = ['cow_left', 'cow_right', 'shed'];
+    return all.filter(id => !this.destroyedLocations.has(id));
+  }
+
   start(): void {
+    this.encounterCount++;
     this.state = PuzzleState.Telegraph;
     this.timer = 0;
     this.chosenAction = null;
+    this.selectedLocation = null;
     this._done = false;
     this._hasResult = false;
-    const locs: LocationId[] = ['cow_left', 'cow_right', 'shed'];
-    this.telegraphLocation = locs[Math.floor(Math.random() * locs.length)];
+
+    const alive = this.getAliveLocations();
+
+    const shuffled = [...COW_NAMES].sort(() => Math.random() - 0.5);
+    let nameIdx = 0;
+    this.cowNameMap.clear();
+    for (const id of alive) {
+      if (id !== 'shed') {
+        this.cowNameMap.set(id, shuffled[nameIdx++ % shuffled.length]);
+      }
+    }
+
+    if (alive.length <= 1) {
+      if (alive.length === 0) {
+        this.billLocation = 'open_ground';
+        this.telegraphLocation = 'open_ground';
+      } else {
+        this.billLocation = alive[0];
+        this.telegraphLocation = alive[0];
+      }
+      this.selectedLocation = this.billLocation;
+      this.state = PuzzleState.ActionChoice;
+      return;
+    }
+
+    this.billLocation = alive[Math.floor(Math.random() * alive.length)];
+
+    if (Math.random() < 0.5) {
+      this.telegraphLocation = this.billLocation;
+    } else {
+      const others = alive.filter(l => l !== this.billLocation);
+      this.telegraphLocation = others[Math.floor(Math.random() * others.length)];
+    }
   }
 
   update(dt: number): void {
@@ -75,7 +131,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
       case PuzzleState.Telegraph:
         if (this.timer >= 1.5) {
           this.timer = 0;
-          this.state = PuzzleState.Choice;
+          this.state = PuzzleState.LocationChoice;
         }
         break;
 
@@ -88,61 +144,97 @@ export class BillRustlerPuzzle implements BossPuzzle {
   }
 
   handleClick(mx: number, my: number): boolean {
-    if (this.state !== PuzzleState.Choice) return false;
-
-    for (const a of this.actions) {
-      if (mx >= a.x && mx <= a.x + a.w && my >= a.y && my <= a.y + a.h) {
-        this.chosenAction = a.id;
-        this.resolve();
-        this.state = PuzzleState.Resolve;
-        this.timer = 0;
-        return true;
+    if (this.state === PuzzleState.LocationChoice) {
+      for (const loc of this.locations) {
+        if (this.destroyedLocations.has(loc.id)) continue;
+        if (mx >= loc.x && mx <= loc.x + loc.w && my >= loc.y && my <= loc.y + loc.h) {
+          this.selectedLocation = loc.id;
+          this.state = PuzzleState.ActionChoice;
+          this.timer = 0;
+          return true;
+        }
       }
+      return false;
     }
+
+    if (this.state === PuzzleState.ActionChoice) {
+      for (const a of this.actions) {
+        if (mx >= a.x && mx <= a.x + a.w && my >= a.y && my <= a.y + a.h) {
+          this.chosenAction = a.id;
+          this.resolve();
+          this.state = PuzzleState.Resolve;
+          this.timer = 0;
+          return true;
+        }
+      }
+      return false;
+    }
+
     return false;
   }
 
   private resolve(): void {
     const action = this.chosenAction!;
-    const loc = this.telegraphLocation;
+    const target = this.selectedLocation!;
+    const bill = this.billLocation;
 
     if (action === 'wait') {
       this._result = {
         bossDamage: 2,
         playerDamage: 0,
         scoreBonus: 200,
-        narrativeLine: 'You catch his dynamite mid-air and hurl it back! The blast scares off the cattle and leaves Bill exposed.',
+        narrativeLine: "You catch his dynamite mid-air and hurl it back! The blast scares Bill and leaves him exposed.",
       };
-    } else if (action === 'dynamite') {
-      if (loc === 'shed') {
+    } else if (target === bill) {
+      if (action === 'dynamite') {
+        this.destroyedLocations.add(target);
+        this._result = {
+          bossDamage: 3,
+          playerDamage: 0,
+          scoreBonus: 150,
+          narrativeLine: "Direct hit! Bill is thrown clear as the spot explodes.",
+        };
+      } else {
         this._result = {
           bossDamage: 2,
           playerDamage: 0,
           scoreBonus: 100,
-          narrativeLine: 'The barn explodes! Bill is thrown clear. The cattle scatter across the plains.',
+          narrativeLine: "Your shot clips Bill! He's wounded and on the run.",
+        };
+      }
+    } else if (action === 'dynamite') {
+      this.destroyedLocations.add(target);
+      if (target === 'shed') {
+        this._result = {
+          bossDamage: 0,
+          playerDamage: 0,
+          scoreBonus: 0,
+          narrativeLine: "The barn goes up in flames! That hiding spot is gone forever.",
         };
       } else {
+        this.destroyedLocations.add('cow_left');
+        this.destroyedLocations.add('cow_right');
         this._result = {
-          bossDamage: 1,
+          bossDamage: 0,
           playerDamage: 0,
-          scoreBonus: 50,
-          narrativeLine: 'The cow takes the blast... Bill is injured but so is the livestock. The town will have questions.',
+          scoreBonus: 0,
+          narrativeLine: "The cows scatter across the plains! Bill's hiding spots are reduced.",
         };
       }
     } else {
-      if ((loc === 'cow_left' || loc === 'cow_right') && action === 'revolver') {
-        this._result = {
-          bossDamage: 1,
-          playerDamage: 0,
-          scoreBonus: 75,
-          narrativeLine: 'Your shot clips Bill! But one of the cattle bolts into the distance.',
-        };
-      } else {
+      if (target === 'shed') {
         this._result = {
           bossDamage: 0,
           playerDamage: 1,
           scoreBonus: 0,
-          narrativeLine: 'Bill ducks behind cover and returns fire. You take a grazing shot.',
+          narrativeLine: "Bill isn't there! He returns fire from his real position and you take a grazing shot.",
+        };
+      } else {
+        this._result = {
+          bossDamage: 0,
+          playerDamage: 0,
+          scoreBonus: 0,
+          narrativeLine: "The cow bolts into the distance. The townsfolk won't be happy about this...",
         };
       }
     }
@@ -159,14 +251,14 @@ export class BillRustlerPuzzle implements BossPuzzle {
     ctx.textAlign = 'center';
     ctx.fillText('DEADEYE — Bill the Rustler', W / 2, 40);
 
-    ctx.font = '16px Courier New';
-    ctx.fillStyle = '#fff';
-    ctx.fillText('Where is Bill hiding? Choose your approach:', W / 2, 70);
-
     this.drawLocations(ctx);
 
-    if (this.state === PuzzleState.Choice || this.state === PuzzleState.Telegraph) {
+    if (this.state === PuzzleState.ActionChoice) {
       this.drawActions(ctx);
+    }
+
+    if (this.state === PuzzleState.Telegraph || this.state === PuzzleState.LocationChoice) {
+      this.drawPrompt(ctx);
     }
 
     if (this.state === PuzzleState.Resolve) {
@@ -176,21 +268,75 @@ export class BillRustlerPuzzle implements BossPuzzle {
     ctx.textAlign = 'left';
   }
 
+  private drawPrompt(ctx: CanvasRenderingContext2D): void {
+    ctx.fillStyle = '#fff';
+    ctx.font = '16px Courier New';
+    ctx.textAlign = 'center';
+
+    if (this.state === PuzzleState.Telegraph) {
+      ctx.fillText('Movement spotted... Where will Bill strike next?', W / 2, 75);
+      ctx.fillStyle = '#ff4444';
+      ctx.font = 'bold 18px Courier New';
+      const flash = Math.sin(this.timer * 6) > 0;
+      if (flash) {
+        ctx.fillText('WAIT... WATCH FOR MOVEMENT', W / 2, 440);
+      }
+    } else {
+      const alive = this.getAliveLocations().length;
+      if (alive > 0) {
+        ctx.fillText('Choose a location to target:', W / 2, 75);
+      }
+    }
+  }
+
   private drawLocations(ctx: CanvasRenderingContext2D): void {
+    const aliveIds = new Set(this.getAliveLocations());
+
     for (const loc of this.locations) {
-      const isTelegraphTarget = loc.id === this.telegraphLocation;
+      const destroyed = this.destroyedLocations.has(loc.id);
+      const alive = aliveIds.has(loc.id);
+      const isTelegraph = loc.id === this.telegraphLocation;
+      const isSelected = loc.id === this.selectedLocation;
       const pulse = 0.3 + Math.sin(this.timer * 4) * 0.2;
 
-      ctx.fillStyle = isTelegraphTarget ? '#3a1a1a' : '#2a1a0a';
+      if (destroyed) {
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(loc.x, loc.y, loc.w, loc.h);
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(loc.x, loc.y, loc.w, loc.h);
+        ctx.fillStyle = '#555';
+        ctx.font = 'bold 14px Courier New';
+        ctx.textAlign = 'center';
+        if (loc.id !== 'shed') {
+          ctx.fillText('— EMPTY —', loc.x + loc.w / 2, loc.y + 100);
+        } else {
+          ctx.fillText('— RUINS —', loc.x + loc.w / 2, loc.y + 100);
+        }
+        continue;
+      }
+
+      ctx.fillStyle = alive ? (isTelegraph ? '#3a1a1a' : '#2a1a0a') : '#1a1a1a';
       ctx.fillRect(loc.x, loc.y, loc.w, loc.h);
-      ctx.strokeStyle = isTelegraphTarget ? `rgba(255, 50, 50, ${pulse})` : '#5c3a21';
-      ctx.lineWidth = isTelegraphTarget ? 3 : 1;
+
+      if (isSelected) {
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 3;
+      } else if (isTelegraph && (this.state === PuzzleState.Telegraph || this.state === PuzzleState.LocationChoice)) {
+        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse})`;
+        ctx.lineWidth = 3;
+      } else {
+        ctx.strokeStyle = '#5c3a21';
+        ctx.lineWidth = 1;
+      }
       ctx.strokeRect(loc.x, loc.y, loc.w, loc.h);
 
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 14px Courier New';
       ctx.textAlign = 'center';
-      ctx.fillText(loc.label, loc.x + loc.w / 2, loc.y + 30);
+
+      const displayName = loc.id === 'shed' ? loc.label : (this.cowNameMap.get(loc.id) || loc.label);
+      ctx.fillText(displayName, loc.x + loc.w / 2, loc.y + 30);
 
       if (loc.id === 'cow_left' || loc.id === 'cow_right') {
         this.drawCowIcon(ctx, loc.x + loc.w / 2, loc.y + 100);
@@ -198,13 +344,29 @@ export class BillRustlerPuzzle implements BossPuzzle {
         this.drawShedIcon(ctx, loc.x + loc.w / 2, loc.y + 100);
       }
 
-      if (isTelegraphTarget && (this.state === PuzzleState.Telegraph || this.state === PuzzleState.Choice)) {
+      if (isTelegraph && (this.state === PuzzleState.Telegraph || this.state === PuzzleState.LocationChoice)) {
         ctx.fillStyle = `rgba(255, 0, 0, ${pulse * 0.3})`;
         ctx.fillRect(loc.x, loc.y, loc.w, loc.h);
         ctx.fillStyle = '#ff4444';
         ctx.font = 'bold 16px Courier New';
-        ctx.fillText(isTelegraphTarget ? '??? MOVEMENT ???' : '', loc.x + loc.w / 2, loc.y + 170);
+        ctx.fillText('??? MOVEMENT ???', loc.x + loc.w / 2, loc.y + 170);
       }
+    }
+
+    if (this.getAliveLocations().length === 0) {
+      const loc = this.openGroundLoc;
+      ctx.fillStyle = '#3a1a1a';
+      ctx.fillRect(loc.x, loc.y, loc.w, loc.h);
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(loc.x, loc.y, loc.w, loc.h);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 20px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText('Bill is exposed in the open!', loc.x + loc.w / 2, loc.y + 50);
+      ctx.fillStyle = '#ff4444';
+      ctx.font = 'bold 16px Courier New';
+      ctx.fillText('No hiding spots remain — take your shot!', loc.x + loc.w / 2, loc.y + 110);
     }
   }
 
@@ -259,10 +421,28 @@ export class BillRustlerPuzzle implements BossPuzzle {
   }
 
   private drawActions(ctx: CanvasRenderingContext2D): void {
-    ctx.font = 'bold 16px Courier New';
+    const alive = this.getAliveLocations();
+    let prompt = 'Choose your weapon:';
+
+    if (this.selectedLocation === 'open_ground' || (alive.length <= 1 && this.selectedLocation)) {
+      const name = this.billLocation === 'open_ground'
+        ? 'in the open'
+        : (this.cowNameMap.get(this.selectedLocation!) || this.selectedLocation);
+      prompt = `Bill is at ${name} — choose your weapon:`;
+    } else if (this.selectedLocation) {
+      const name = this.cowNameMap.get(this.selectedLocation) || 'the barn';
+      prompt = `You're targeting ${name} — choose your weapon:`;
+    }
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '16px Courier New';
     ctx.textAlign = 'center';
+    ctx.fillText(prompt, W / 2, 440);
+
+    ctx.font = 'bold 16px Courier New';
 
     for (const a of this.actions) {
+      const isOver = this.state === PuzzleState.ActionChoice;
       const bgColor = a.id === 'dynamite' ? '#8b4513' : a.id === 'revolver' ? '#5c3a21' : '#3e2723';
       ctx.fillStyle = bgColor;
       ctx.fillRect(a.x, a.y, a.w, a.h);
@@ -270,17 +450,8 @@ export class BillRustlerPuzzle implements BossPuzzle {
       ctx.lineWidth = 2;
       ctx.strokeRect(a.x, a.y, a.w, a.h);
 
-      ctx.fillStyle = '#ffd700';
+      ctx.fillStyle = isOver ? '#fff' : '#ffd700';
       ctx.fillText(a.label, a.x + a.w / 2, a.y + 32);
-    }
-
-    if (this.state === PuzzleState.Telegraph) {
-      ctx.fillStyle = '#ff4444';
-      ctx.font = 'bold 18px Courier New';
-      const flash = Math.sin(this.timer * 6) > 0;
-      if (flash) {
-        ctx.fillText('WAIT... WHERE IS HE?', W / 2, 440);
-      }
     }
   }
 
