@@ -8,6 +8,7 @@ const W = CONFIG.canvas.width;
 const H = CONFIG.canvas.height;
 
 const game = new Game();
+(window as any).__game = game;
 
 let lastTime = performance.now();
 
