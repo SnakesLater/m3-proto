@@ -265,3 +265,96 @@
 **Decision:** Changed to `#5c3a21` (dark brown) with 3.5px width. Added golden highlight arc (`#8b6914`, 1.5px) for visual interest. Fill changed to `rgba(92, 58, 33, 0.35)`.
 
 **Why:** The lasso is a critical interactive element — the player needs to see it instantly. The original color was a design blind spot (matched the board exactly). The dark brown + golden accent makes it visually distinct from all standard piece types while maintaining the Western aesthetic.
+
+---
+
+## §8. Deadeye System (Boss Fights)
+
+### §8.1 — Deadeye replaces health decay as primary boss tension
+
+**Context:** Original boss fight had continuous health decay (2 HP/s). Player health drained constantly, creating urgency but feeling passive and unengaging.
+
+**Alternatives considered:**
+1. **Keep health decay** (original): Constant drain felt like a lazy timer. No interesting decisions — just "match faster."
+2. **Deadeye drain** (chosen): Deadeye starts at 0, fills via matches, drains during BoardPhase. At 0 → damage. At max → special trigger.
+3. **No timer at all**: Only hearts and patterns. Problem: boss fight has no soft fail state.
+
+**Decision:** Deadeye replaces health decay entirely. Health bar hidden during boss fights (`showHealthBar: false`). Deadeye meter becomes the primary HUD element.
+
+**Why:** Deadeye ties the tension mechanic to active play (matching) rather than passive waiting. Players feel rewarded for good matches (deadeye fills up) and punished for stalling (deadeye drains out). The drain rate (1.5/s) creates a ~30s window before a full deadeye bar empties, giving the player breathing room but not infinite time. The "hit 0 → 1 damage + reset to 50%" creates a rhythm: take damage, recover, build toward puzzle trigger.
+
+### §8.2 — Deadeye max triggers puzzle mode (not generic bonus)
+
+**Context:** Original Deadeye max triggered a shootout minigame (at level completion). For boss fights, we wanted something that felt more connected to the boss encounter itself.
+
+**Alternatives considered:**
+1. **Shootout-style minigame**: Random targets pop up. Problem: disconnected from the boss narrative.
+2. **Pattern-style attack**: Generic damage burst. Problem: same as existing pattern phase.
+3. **Boss-specific puzzle** (chosen): Each boss defines a unique interactive scene with multiple solutions.
+
+**Decision:** When deadeye reaches 100 during boss BoardPhase and the boss has `hasPuzzle: true`, the boss transitions to PuzzleIntro → PuzzleActive → PuzzleResolve → PuzzleExit → BoardPhase.
+
+**Why:** Boss-specific puzzles make each boss feel distinct. The puzzle isn't just "more match-3" — it's a narrative moment where the player's choice matters. This creates the "dopamine hit" the design brief asked for: a meaningful decision with visible consequences.
+
+---
+
+## §9. Puzzle Mode Architecture
+
+### §9.1 — Choice-based puzzle (not grid-based mini-game)
+
+**Context:** Two approaches were considered for puzzle mode interactions: (A) mini-grids with weapon pieces at each boss spawn location, where the player matches weapons to fire at that location; (B) a shifted viewport showing locations with clickable action buttons.
+
+**Alternatives considered:**
+1. **Mini-grid per location** (Option A): Multiple match-3 grids, each at a boss peek location. Matching weapon pieces fires that weapon. Problem: multiple grids = massive UI complexity, match detection across grids, cognitive overload during a boss fight.
+2. **Shifted viewport + choice buttons** (Option B, chosen): Viewport slides down to show "over the cover" view. 3 locations visible. Player clicks an action button. Resolution plays out with narrative text.
+3. **Hybrid**: Shift viewport to one location at a time, show a weapon grid, player matches weapon → fire → shift to next location. Problem: multi-step interaction breaks flow.
+
+**Decision:** Option B: single-choice puzzle with telegraph → choice → resolve cycle. Viewport shifts to show a static scene. Player reads the telegraph, picks an action, sees the outcome.
+
+**Why:** Option B is implementable in a single file (~250 lines) with no new grid mechanics. It preserves the "meaningful choice" goal without the scope of building a second match-3 system. The 3-phase cycle (telegraph → choice → resolve) creates clear gameplay beats. Future bosses can define different scene layouts, location counts, and action sets while using the same puzzle interface.
+
+### §9.2 — Viewport shift (not screen transition)
+
+**Context:** The puzzle mode could either: (a) fade to a new screen, (b) shift the viewport within the existing canvas, or (c) overlay on top of the frozen board.
+
+**Alternatives considered:**
+1. **Full screen transition**: Black out, show puzzle on new screen, fade back. Problem: disorienting, breaks the "you're in a boss fight" feeling.
+2. **Overlay on frozen board** (partial): Puzzle draws over the dimmed board. Problem: board still visible but inactive — player might try to click it.
+3. **Viewport shift** (chosen): Board slides down via `ctx.translate(0, boss.viewShift)`. The puzzle scene occupies the vacated upper portion. Board becomes visually inaccessible but still rendered.
+
+**Decision:** Board is translated downward by 200px during puzzle states. Puzzle overlay renders on the full canvas on top. Clicks are intercepted by boss.handleClick() → puzzle.handleClick() during puzzle states.
+
+**Why:** The viewport shift tells a visual story: "you're looking over the cover now." It's a smooth animation (lerp-based), not a hard cut. The board staying visible (just shifted) maintains spatial awareness — the player knows they'll return to the same board state.
+
+### §9.3 — Puzzle result applied immediately (not queued)
+
+**Context:** Puzzle results (boss damage, player damage, score) could be applied at puzzle end or at some later resolution point.
+
+**Decision:** Results are applied during `PuzzleResolve` state via `Boss.drawOverlay()` callback. `onPuzzleDamagePlayer` and `onPuzzleScoreBonus` callbacks in Game.ts apply the consequences immediately.
+
+**Why:** Immediate feedback for the puzzle outcome. The player sees the boss health bar decrease or their own health decrease right after the narrative text. The 1.0s resolve duration gives the player time to read the result before returning to BoardPhase.
+
+---
+
+## §10. Bill the Rustler Puzzle Design
+
+### §10.1 — Multiple valid solutions with tradeoffs
+
+**Context:** Bill the Rustler's puzzle needed to feel like a meaningful choice, not a multiple-choice quiz.
+
+**Alternatives considered:**
+1. **Single correct answer**: One best solution per telegraph. Problem: no replayability, feels like a test.
+2. **All solutions valid but different** (chosen): Every choice combination produces a valid outcome. The "best" outcome (Wait → catch dynamite) requires reading the telegraph and choosing the hardest option.
+3. **Random outcome regardless of choice**: Adds chaos but removes player agency.
+
+**Decision:** 3 locations × 3 actions = 9 possible outcomes. Each outcome pair has unique damage, score, and narrative text. Player agency is preserved: a skilled player who reads the telegraph and chooses "Wait" gets the best result. A player who picks recklessly still gets a result — just worse.
+
+**Why:** Multiple valid solutions prevent frustration (no "wrong answer" soft-lock) while rewarding skill. The narrative text gives each outcome character — the town's reaction changes based on your choices. This sets up the future "narrative consequence" system.
+
+### §10.2 — Cow/shed locations aligned with Western theme
+
+**Context:** Bill's cover spots needed to feel authentic to the "cattle rustler" character.
+
+**Decision:** Three locations: Bessie (cow), Clover (cow), Old Barn (shed). Bill telegraphs from one. Actions: Revolver (shoot the spot), Dynamite (explosive), Wait (catch his dynamite).
+
+**Why:** The cow locations tie into the existing cow mechanic on the board — the boss fight board has 3 cows, and the puzzle shows 2 of them. This creates visual continuity. The barn adds environmental storytelling (this is a ranch). The "Wait" option teaches the player that patience can be a weapon — they catch Bill's own dynamite and turn it against him.

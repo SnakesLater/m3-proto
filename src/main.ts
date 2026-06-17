@@ -40,7 +40,7 @@ canvas.addEventListener('mousemove', (e: MouseEvent) => {
 });
 
 document.addEventListener('keydown', (e: KeyboardEvent) => {
-  game.handleKeyDown(e.key);
+  game.handleKeyDown(e.key, e.shiftKey);
 });
 
 requestAnimationFrame(loop);

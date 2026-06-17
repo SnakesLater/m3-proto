@@ -17,6 +17,7 @@ export interface HUDData {
   isBossLevel?: boolean;
   heartsOnBoard?: number;
   cowsRemaining?: number;
+  showHealthBar?: boolean;
 }
 
 export class HUD {
@@ -69,7 +70,9 @@ export class HUD {
       ctx.fillText(`COMBO x${combo}`, W - 20, 65);
     }
 
-    this.drawHealthBar(ctx, health);
+    if (data.showHealthBar !== false) {
+      this.drawHealthBar(ctx, health);
+    }
     this.drawDeadeyeMeter(ctx, deadeye, deadeyeMax);
   }
 

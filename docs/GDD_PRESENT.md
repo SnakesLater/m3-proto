@@ -15,6 +15,9 @@ The major architectural shifts from PAST:
 4. **Boss patterns implemented** — 4 pattern types with telegraph/active/resolve phases (DECISIONS.md §4)
 5. **Boss visual clarity improved** — darker overlays, larger targets (DECISIONS.md §5)
 6. **Dev shortcuts added** — B key, VITE_BOSS_TEST env var (DECISIONS.md §6)
+7. **Health decay removed from boss fights** — replaced with Deadeye drain + puzzle system (DECISIONS.md §8)
+8. **Puzzle mode added** — Deadeye max triggers boss-specific interactive puzzle (DECISIONS.md §9)
+9. **Bill the Rustler puzzle** — first puzzle boss with telegraph/choice/resolve cycle (DECISIONS.md §10)
 
 ---
 
@@ -161,7 +164,7 @@ The major architectural shifts from PAST:
 - Combo meter builds with consecutive matches (max 10)
 - Match-4 clears its entire row; match-5+ clears its entire column as well
 - **Health (canteen) does NOT drain during regular levels** [CHANGE — removed to reduce time pressure]
-- **Health (canteen) DOES drain during boss fights** (2 HP/s base + 0.5/level) [CHANGE — now boss-only]
+- **Health (canteen) drains during boss fights ONLY via Deadeye system** (2 HP/s base replaced with 1.5/s deadeye drain) [CHANGE]
 - Move budget limits total moves per level
 
 ### Cow/Lasso Subsystem [CHANGE — entirely new]
@@ -253,7 +256,16 @@ BoardPhase ──(play on board, match hearts for +1 damage each)──→ moves
 |--------|--------|------|
 | Heart adjacency pop | 1 per pop | During BoardPhase — any match adjacent to a heart |
 | Pattern completion | Varies by pattern | End of PatternPhase |
-| Health decay | 2 HP/s | Continuous during boss fight |
+| Puzzle resolution | Varies by puzzle | End of PuzzleResolve state |
+| Deadeye drain (player) | 1 HP when deadeye hits 0 | During BoardPhase |
+
+**Progression damage table:**
+```
+Heart pops:      1 dmg each, unlimited via heart respawn
+Patterns:        0-4 dmg per cycle (3 moves)
+Puzzle mode:     0-2 dmg per trigger (when deadeye maxes)
+Deadeye drain:   1.5/s drain; 0 = 1 player damage + reset to 50
+```
 
 ### Boss Patterns
 
@@ -388,8 +400,10 @@ src/
 ├── ResultsScreen.ts        # Post-level results summary
 ├── Shootout.ts             # Shootout state machine (with discrimination)
 ├── Silhouette.ts           # Target entity (hostile/friendly discrimination)
-├── Boss.ts                 # Boss encounter orchestrator (BoardPhase ↔ PatternPhase loop)
+├── Boss.ts                 # Boss encounter orchestrator (BoardPhase ↔ PatternPhase ↔ Puzzle states)
 ├── BossPatterns.ts         # 4 boss pattern implementations + PatternManager
+├── BossPuzzle.ts           # Boss puzzle interface (BossPuzzle + BossPuzzleResult)
+├── BillRustlerPuzzle.ts    # Bill the Rustler puzzle — telegraph/choice/resolve cycle
 ├── HUD.ts                  # HUD: score, goal, turns, combo, health, deadeye, lassos, boss data
 ├── Gun.ts                  # Weapon renderer (revolver with recoil + muzzle flash)
 ├── Screens.ts              # Menu, Game Over
@@ -456,7 +470,7 @@ Dev shortcut: B key at RegionMap/TownSelect → skip directly to BossActive
 | 1 | RegionMap, TownSelect, ResultsScreen, HUD (upgraded), Board (moves/win), Game (state machine) | ✅ Level flow | Partial |
 | 2 | Shootout, Silhouette, Game (ConfirmShootout/ShootoutActive states), Deadeye persistence | ✅ Board→Shootout→Grip | Yes |
 | 3 | Boss patterns, Boss, BossPatterns, cow/lasso/heart mechanics | ✅ All phases | Yes |
-| 4 | LootManager, Weapon, WeaponAbility | Not yet | — |
+| 4 | BossPuzzle (base), BillRustlerPuzzle, puzzle states in Boss.ts, Deadeye drain in Game.ts | ✅ Bill puzzle works | Yes |
 | 5 | WildernessHazard, wilderness routing | Not yet | — |
 | 6 | Reconquest system | Not yet | — |
 | 7 | Polish (effects, audio, animation, region art) | Not yet | — |
@@ -528,7 +542,19 @@ Dev shortcut: B key at RegionMap/TownSelect → skip directly to BossActive
 - Lasso starting placement at center top for cow levels
 - Playwright smoke tests (4 tests pass on Firefox)
 
-**Not yet implemented (Phase 4+):**
+**Phase 4 implemented (boss puzzle mode + Deadeye drain):**
+- Deadeye replaces health decay as primary boss tension mechanic
+- Deadeye drains at 1.5/s during BoardPhase, fills via matches
+- Deadeye hitting 0 → 1 damage + reset to 50%
+- Deadeye maxing → puzzle trigger for puzzle-capable bosses
+- Viewport shift animation (board slides down during puzzle)
+- BossPuzzle interface (start/update/draw/handleClick/done/result)
+- Bill the Rustler puzzle: 3 locations (2 cows + shed), 3 actions (Revolver/Dynamite/Wait)
+- Multiple solution outcomes with boss damage, player damage, score, and narrative text
+- `showHealthBar` flag in HUD to hide health bar during boss fights
+- Shift+B cheat key to start Bill boss fight directly
+
+**Not yet implemented (Phase 5+):**
 - Boss defeat → region transition → next region unlock
 - Weapons / loadouts / loot
 - Wilderness hazards

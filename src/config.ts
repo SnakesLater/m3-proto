@@ -23,9 +23,20 @@ export const CONFIG = {
     deadeyePerMatch: 8,
     deadeyePerLine: 15,
     deadeyePerArea: 25,
+    deadeyeDrainRate: 1.5,
+    deadeyeDrainDamage: 1,
+    deadeyeDrainReset: 50,
+    deadeyePuzzleTrigger: 100,
     regularTypeCount: 5,
     lassoMax: 3,
     cowsToCapture: 3,
+  },
+
+  puzzle: {
+    shiftSpeed: 4,
+    slideDuration: 0.5,
+    resolveDuration: 1.0,
+    exitDuration: 0.4,
   },
 
   shootout: {

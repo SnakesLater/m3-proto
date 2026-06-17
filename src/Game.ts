@@ -12,6 +12,7 @@ import { TownSelect } from './TownSelect';
 import { ResultsScreen } from './ResultsScreen';
 import { Shootout, ShootoutPhase } from './Shootout';
 import { BossFight, BossState } from './Boss';
+import { BillRustlerPuzzle } from './BillRustlerPuzzle';
 import { getTown, totalGripReduction } from './data';
 import type { LevelResult } from './data';
 import { REGIONS } from './data';
@@ -176,10 +177,11 @@ export class Game {
     this.state = GameState.Playing;
   }
 
-  private startBossFight(): void {
+  private startBossFight(puzzleBoss = false): void {
     this.score = 0;
     this.combo = 0;
     this.health = CONFIG.game.initialHealth;
+    this.deadeye = puzzleBoss ? CONFIG.game.deadeyeMax - 5 : 0;
     this.lassos = 0;
     this.shakeIntensity = 0;
     this.shakeDuration = 0;
@@ -192,15 +194,28 @@ export class Game {
     this.board.setupLevel(99, 0, cowsToSpawn, heartsToSpawn, true, false);
     this.cowsRemaining = cowsToSpawn;
 
-    this.boss.start(region.boss.health, region.boss.name);
+    if (puzzleBoss) {
+      const bill = new BillRustlerPuzzle();
+      this.boss.start(10, 'Bill the Rustler');
+      this.boss.setPuzzle(bill);
+      this.boss.onPuzzleDamagePlayer = (dmg) => {
+        this.health = Math.max(0, this.health - dmg);
+      };
+      this.boss.onPuzzleScoreBonus = (bonus) => {
+        this.score += bonus;
+      };
+    } else {
+      this.boss.start(region.boss.health, region.boss.name);
+    }
+
     this.fadeAlpha = 0.3;
     this.state = GameState.BossActive;
   }
 
-  handleKeyDown(key: string): void {
+  handleKeyDown(key: string, shiftKey = false): void {
     if (key === 'b' || key === 'B') {
       if (this.state === GameState.RegionMap || this.state === GameState.TownSelect) {
-        this.startBossFight();
+        this.startBossFight(shiftKey && key === 'B');
       }
     }
   }
@@ -329,8 +344,13 @@ export class Game {
 
       case GameState.BossActive: {
         if (this.boss.handleClick(mx, my)) break;
+        if (this.boss.state === BossState.PuzzleActive ||
+            this.boss.state === BossState.PuzzleIntro ||
+            this.boss.state === BossState.PuzzleResolve ||
+            this.boss.state === BossState.PuzzleExit) break;
         if (!this.board.canPlay) return;
-        this.board.handleClick(mx, my, this.effects);
+        const adjustedMy = my - this.boss.viewShift;
+        this.board.handleClick(mx, adjustedMy, this.effects);
         break;
       }
 
@@ -394,10 +414,20 @@ export class Game {
           this.state = GameState.RegionMap;
         }
 
-        this.health -= CONFIG.game.healthDecayBase * dt;
-        if (this.health <= 0) {
-          this.health = 0;
-          this.state = GameState.GameOver;
+        if (this.boss.state === BossState.BoardPhase) {
+          this.deadeye -= CONFIG.game.deadeyeDrainRate * dt;
+          if (this.deadeye <= 0) {
+            this.deadeye = Math.max(0, this.deadeye);
+            this.health = Math.max(0, this.health - CONFIG.game.deadeyeDrainDamage);
+            this.deadeye = CONFIG.game.deadeyeDrainReset;
+            if (this.health <= 0) {
+              this.health = 0;
+              this.state = GameState.GameOver;
+            }
+          } else if (this.deadeye >= CONFIG.game.deadeyeMax && this.boss.hasPuzzle) {
+            this.deadeye = 0;
+            this.boss.triggerPuzzleIntro();
+          }
         }
         return;
 
@@ -589,7 +619,11 @@ export class Game {
           ctx.translate(sx, sy);
         }
 
+        ctx.save();
+        ctx.translate(0, this.boss.viewShift);
         this.board.draw(ctx);
+        ctx.restore();
+
         const heartsOnBoard = this.board.pieces.filter(p => p.type === 6 && !p.removing).length;
         this.hud.draw(ctx, {
           score: this.score,
@@ -606,6 +640,7 @@ export class Game {
           isBossLevel: true,
           heartsOnBoard,
           cowsRemaining: this.cowsRemaining,
+          showHealthBar: false,
         });
         this.boss.drawOverlay(ctx);
         this.effects.draw(ctx);

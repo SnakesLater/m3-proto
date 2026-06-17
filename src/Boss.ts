@@ -1,10 +1,15 @@
 import { CONFIG } from './config';
 import { PatternManager } from './BossPatterns';
+import type { BossPuzzle } from './BossPuzzle';
 
 export enum BossState {
   Intro,
   BoardPhase,
   PatternPhase,
+  PuzzleIntro,
+  PuzzleActive,
+  PuzzleResolve,
+  PuzzleExit,
   Victory,
   Done,
 }
@@ -15,6 +20,7 @@ const H = CONFIG.canvas.height;
 export class BossFight {
   state = BossState.Intro;
   timer = 0;
+  puzzleSlideTimer = 0;
   health = 10;
   maxHealth = 10;
   bossName = '';
@@ -23,6 +29,13 @@ export class BossFight {
   lastMovesUsed = 0;
   boardPhaseTimer = 0;
   boardPhaseTimeout = 15;
+  hasPuzzle = false;
+  puzzle: BossPuzzle | null = null;
+  viewShift = 0;
+  targetViewShift = 0;
+
+  onPuzzleDamagePlayer: ((damage: number) => void) | null = null;
+  onPuzzleScoreBonus: ((bonus: number) => void) | null = null;
 
   constructor() {
     this.patterns = new PatternManager();
@@ -31,16 +44,26 @@ export class BossFight {
   start(health: number, name: string): void {
     this.state = BossState.Intro;
     this.timer = 0;
+    this.puzzleSlideTimer = 0;
     this.health = health;
     this.maxHealth = health;
     this.bossName = name;
     this.patterns.reset();
     this.lastMovesUsed = 0;
     this.boardPhaseTimer = 0;
+    this.hasPuzzle = false;
+    this.puzzle = null;
+    this.viewShift = 0;
+    this.targetViewShift = 0;
   }
 
   get done(): boolean {
     return this.state === BossState.Done;
+  }
+
+  setPuzzle(puzzle: BossPuzzle): void {
+    this.hasPuzzle = true;
+    this.puzzle = puzzle;
   }
 
   notifyBoardMove(movesUsed: number): void {
@@ -60,6 +83,16 @@ export class BossFight {
     }
   }
 
+  triggerPuzzleIntro(): void {
+    if (this.hasPuzzle && this.puzzle) {
+      this.state = BossState.PuzzleIntro;
+      this.timer = 0;
+      this.puzzleSlideTimer = 0;
+      this.targetViewShift = 200;
+      this.puzzle.start();
+    }
+  }
+
   update(dt: number): void {
     this.timer += dt;
 
@@ -68,6 +101,8 @@ export class BossFight {
       this.timer = 0;
       return;
     }
+
+    this.viewShift += (this.targetViewShift - this.viewShift) * Math.min(1, dt * CONFIG.puzzle.shiftSpeed);
 
     switch (this.state) {
       case BossState.Intro:
@@ -97,6 +132,44 @@ export class BossFight {
         }
         break;
 
+      case BossState.PuzzleIntro:
+        this.puzzleSlideTimer += dt;
+        if (this.puzzleSlideTimer >= CONFIG.puzzle.slideDuration) {
+          this.viewShift = this.targetViewShift;
+          this.state = BossState.PuzzleActive;
+          this.timer = 0;
+        }
+        break;
+
+      case BossState.PuzzleActive:
+        if (this.puzzle) {
+          this.puzzle.update(dt);
+          if (this.puzzle.done) {
+            this.state = BossState.PuzzleResolve;
+            this.timer = 0;
+          }
+        }
+        break;
+
+      case BossState.PuzzleResolve:
+        this.timer += dt;
+        if (this.timer >= CONFIG.puzzle.resolveDuration) {
+          this.state = BossState.PuzzleExit;
+          this.targetViewShift = 0;
+          this.puzzleSlideTimer = 0;
+        }
+        break;
+
+      case BossState.PuzzleExit:
+        this.puzzleSlideTimer += dt;
+        if (this.puzzleSlideTimer >= CONFIG.puzzle.exitDuration) {
+          this.viewShift = 0;
+          this.state = BossState.BoardPhase;
+          this.timer = 0;
+          this.boardPhaseTimer = 0;
+        }
+        break;
+
       case BossState.Victory:
         if (this.timer >= CONFIG.boss.victoryDuration) {
           this.state = BossState.Done;
@@ -110,6 +183,9 @@ export class BossFight {
       this.patterns.handleClick(mx, my);
       return true;
     }
+    if (this.state === BossState.PuzzleActive && this.puzzle) {
+      return this.puzzle.handleClick(mx, my);
+    }
     return false;
   }
 
@@ -119,7 +195,12 @@ export class BossFight {
     ctx.textAlign = 'center';
     ctx.fillText(`BOSS: ${this.bossName}`, W / 2, 28);
 
-    this.drawHealthBar(ctx);
+    if (this.state !== BossState.PuzzleIntro &&
+        this.state !== BossState.PuzzleActive &&
+        this.state !== BossState.PuzzleResolve &&
+        this.state !== BossState.PuzzleExit) {
+      this.drawHealthBar(ctx);
+    }
 
     switch (this.state) {
       case BossState.Intro:
@@ -150,6 +231,47 @@ export class BossFight {
           ctx.fillText(`⚠ ${this.patterns.activePattern.name} ⚠`, W / 2, 85);
           this.patterns.draw(ctx);
         }
+        break;
+      }
+
+      case BossState.PuzzleIntro: {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 24px Courier New';
+        ctx.fillText('DEADEYE — Puzzle Mode', W / 2, 120);
+        break;
+      }
+
+      case BossState.PuzzleActive: {
+        if (this.puzzle) {
+          this.puzzle.draw(ctx);
+        }
+        break;
+      }
+
+      case BossState.PuzzleResolve: {
+        if (this.puzzle && this.puzzle.hasResult) {
+          const r = this.puzzle.result;
+          if (this.onPuzzleDamagePlayer && r.playerDamage > 0) {
+            this.onPuzzleDamagePlayer(r.playerDamage);
+          }
+          if (this.onPuzzleScoreBonus && r.scoreBonus > 0) {
+            this.onPuzzleScoreBonus(r.scoreBonus);
+          }
+          this.health = Math.max(0, this.health - r.bossDamage);
+          this.puzzle.draw(ctx);
+        }
+        break;
+      }
+
+      case BossState.PuzzleExit: {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#aaa';
+        ctx.font = '20px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('Returning to the fight...', W / 2, 120);
         break;
       }
 

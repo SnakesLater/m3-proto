@@ -302,25 +302,39 @@ During boss fights, HUD shows `HEARTS: N` where N = count of non-removing hearts
 
 ## 8. Boss Fight System
 
-### State Machine (`BossState` at `src/Boss.ts:4-10`)
+### State Machine (`BossState` at `src/Boss.ts:4-16`)
 
 ```
 Intro (1.5s) → BoardPhase → (3 moves) → PatternPhase → (pattern ends, damage applied)
-                                                       → BoardPhase → ... loop
-                                                       or boss HP ≤ 0 → Victory → Done
+              → (deadeye max + puzzle boss) → PuzzleIntro → PuzzleActive → PuzzleResolve → PuzzleExit
+                                                        → BoardPhase → ... loop
+                                                        or boss HP ≤ 0 → Victory → Done
 ```
 
-### BoardPhase (`src/Boss.ts:77-78`)
+### BoardPhase (`src/Boss.ts:87-94`)
 - Player makes moves on the board
 - `notifyBoardMove()` called from Game.ts when `Board.movesUsed` changes
 - `notifyHeartMatched()` called when a heart is popped (adjacent to match)
 - After 3 moves: `PatternManager.triggerNext()` selects next pattern, state → PatternPhase
+- Deadeye drains at 1.5/s during BoardPhase
+- If deadeye reaches 0: player takes 1 damage, deadeye resets to 50
+- If deadeye reaches 100 AND boss has puzzle mode: `triggerPuzzleIntro()` → PuzzleIntro
 
-### PatternPhase (`src/Boss.ts:80-86`)
+### PatternPhase (`src/Boss.ts:96-103`)
 - Current pattern plays through its telegraph → active → resolve phases
 - `PatternManager.update(dt)` called every frame
 - When pattern is done (`!patterns.inPatternPhase`): damage applied to boss health, state → BoardPhase
 - Click events are intercepted by `Boss.handleClick()` which forwards to `PatternManager.handleClick()`
+
+### Puzzle States (new in V2)
+| State | Description | Duration |
+|-------|-------------|----------|
+| `PuzzleIntro` | Board slides down (viewport shift), puzzle initializes | 0.5s |
+| `PuzzleActive` | Boss puzzle scene displayed, player interacts | Variable |
+| `PuzzleResolve` | Results shown, consequences applied (damage, score) | 1.0s |
+| `PuzzleExit` | Board slides back up, returns to BoardPhase | 0.4s |
+
+**Viewport shift** (`Boss.viewShift`): During puzzle states, the board is visually translated downward by `this.boss.viewShift` (target 200px). The puzzle overlay renders on top. Clicks during puzzle states are intercepted by `Boss.handleClick()` → `puzzle.handleClick()`.
 
 ### Boss Health Sources
 
@@ -331,7 +345,7 @@ Intro (1.5s) → BoardPhase → (3 moves) → PatternPhase → (pattern ends, da
 | Pattern: Dynamite Toss | 2 if hit, 0 if miss | PatternPhase end |
 | Pattern: Quick Draw | 2 if hit, 0 if miss | PatternPhase end |
 | Pattern: Reload Window | clicks × 0.5 (max 4) | PatternPhase end |
-| Health decay | 2 HP/s continuous | Always during boss fight |
+| Puzzle resolution | Varies by puzzle | PuzzleResolve state |
 
 ### Patterns Detail
 
@@ -384,15 +398,15 @@ See `src/BossPatterns.ts` for complete implementation.
 - Health does NOT reach 0 = no game over from health alone on regular levels
 
 ### Boss Fights (BossActive state)
-- Health decays at 2 HP/s (`CONFIG.game.healthDecayBase`, `src/Game.ts:383-387`)
+- **No health decay** — health drain was removed. Replaced by Deadeye drain system.
 - Health = 0 → GameOver
 - Matches still restore health (+8 per match)
 - Max health: 100
+- Health damage sources: Deadeye hitting 0 (1 damage), pattern minigames (pattern damage), puzzle consequences (varies)
 
 ### Health Display
-- Health bar at top-right of HUD (`src/HUD.ts:76-110`)
-- Rounded bar with gold-to-orange gradient fill
-- Text: `HP N` centered on bar
+- Health bar at top-right of HUD (`src/HUD.ts:76-110`) — **hidden during boss fights** (`showHealthBar: false`)
+- Deadeye meter becomes the primary boss fight HUD element
 
 ---
 
@@ -424,7 +438,12 @@ See `src/BossPatterns.ts` for complete implementation.
 | Area (5+) | +25 |
 | Max | 100 (`CONFIG.game.deadeyeMax`) |
 
-### Usage
+### Drain (Boss Fights)
+- During boss BoardPhase, deadeye drains at `deadeyeDrainRate` (1.5/s) (`src/Game.ts:388-399`)
+- When deadeye hits 0: player takes `deadeyeDrainDamage` (1 HP), deadeye resets to `deadeyeDrainReset` (50)
+- When deadeye reaches `deadeyeMax` (100) and boss has puzzle mode: puzzle triggers automatically, deadeye resets to 0
+
+### Usage (Regular Levels)
 - When deadeye is full (100) and the current town has `hasShootout: true`:
   - Level completion shows a "ConfirmShootout" prompt (`GameState.ConfirmShootout`)
   - Player can choose to enter shootout or skip
@@ -435,10 +454,76 @@ See `src/BossPatterns.ts` for complete implementation.
 - Deadeye meter at top-center of HUD (`src/HUD.ts:112-140`)
 - Brown-to-orange-to-red gradient fill
 - Label: "DEADEYE" when filling, "DEADEYE READY" when full
+- **Health bar hidden during boss fights** — deadeye replaces it as primary tension meter
 
 ---
 
-## 12. Level Win/Lose Conditions
+## 12. Puzzle Mode (Boss-Specific)
+
+### Overview
+Puzzle Mode is a boss-specific interactive scene triggered when Deadeye maxes during a boss fight with `hasPuzzle: true`. Each boss defines its own puzzle with multiple solutions, tradeoffs, and narrative consequences.
+
+### Flow
+```
+Deadeye reaches 100 during BoardPhase
+  → Boss.triggerPuzzleIntro() called
+  → BossState → PuzzleIntro (viewport slides down, 0.5s)
+  → BossState → PuzzleActive (puzzle runs, player interacts)
+  → BossState → PuzzleResolve (results shown, 1.0s, consequences applied)
+  → BossState → PuzzleExit (viewport slides back, 0.4s)
+  → BossState → BoardPhase (resume regular play)
+```
+
+### Interface (`BossPuzzle` at `src/BossPuzzle.ts`)
+```typescript
+interface BossPuzzle {
+  readonly name: string;
+  start(): void;
+  update(dt: number): void;
+  draw(ctx: CanvasRenderingContext2D): void;
+  handleClick(mx: number, my: number): boolean;
+  readonly done: boolean;
+  readonly hasResult: boolean;
+  readonly result: BossPuzzleResult;
+}
+```
+
+### Puzzle Result (`BossPuzzleResult`)
+| Field | Type | Description |
+|-------|------|-------------|
+| `bossDamage` | number | HP subtracted from boss |
+| `playerDamage` | number | HP subtracted from player (1 = grazing hit) |
+| `scoreBonus` | number | Bonus score awarded |
+| `narrativeLine` | string | Flavor text describing the outcome |
+
+### Bill the Rustler Puzzle (`src/BillRustlerPuzzle.ts`)
+The first puzzle boss. Bill hides behind cattle near a barn. The player sees 3 locations and must choose their approach.
+
+**Phases:**
+1. **Telegraph** (1.5s): 3 locations shown — Bessie (cow), Clover (cow), Old Barn (shed). A red pulse indicates where Bill is hiding.
+2. **Choice** (player input): 3 action buttons — **Revolver**, **Dynamite**, **Wait...**
+3. **Resolve** (2.0s): Outcome displayed with narrative text.
+
+**Outcomes by choice:**
+
+| Choice | Bill at Cow | Bill at Shed |
+|--------|-------------|--------------|
+| **Revolver** | +1 boss dmg, cow scares off (rep hit) | Miss, player takes 1 damage |
+| **Dynamite** | +1 boss dmg, cow killed (bad rep) | +2 boss dmg, shed destroyed |
+| **Wait...** | +2 boss dmg, catch dynamite, scare cows (best) | +2 boss dmg, catch dynamite, save shed (best) |
+
+**Design pattern:** Multiple valid solutions with tradeoffs. The player can succeed with any choice but the "best" outcome requires reading the telegraph and choosing Wait (hardest execution, best reward).
+
+### Future Boss Design Pattern
+Each puzzle boss should define:
+- A unique scene (different cover layout, visual theme)
+- 2-3 valid approaches with tradeoffs
+- Telegraph that communicates the "optimal" path
+- Narrative consequences that affect town dialogue
+
+---
+
+## 13. Level Win/Lose Conditions
 
 ### Standard Levels (non-cow, non-boss)
 - Win: `score >= scoreTarget` before `movesUsed >= turnBudget`
@@ -463,7 +548,7 @@ See `src/BossPatterns.ts` for complete implementation.
 
 ---
 
-## 13. HUD Elements
+## 14. HUD Elements
 
 ### Layout
 
@@ -487,7 +572,7 @@ When `isBossLevel: true` in HUDData:
 
 ---
 
-## 14. Input Handling
+## 15. Input Handling
 
 ### Mouse Clicks
 - `Game.handleClick(mx, my)` at `src/Game.ts:267-338` routes clicks based on current `GameState`
@@ -515,7 +600,7 @@ When `isBossLevel: true` in HUDData:
 
 ---
 
-## 15. Game State Machine
+## 16. Game State Machine
 
 ### States (`GameState` enum at `src/Game.ts:19-29`)
 
@@ -546,20 +631,28 @@ ConfirmShootout → (click "Shoot") → ShootoutActive
 ShootoutActive → (done) → Results
 Results → (click Continue) → RegionMap
          → (if bossTriggered) → BossActive
-BossActive → (boss HP ≤ 0) → Victory (2s) → Done → RegionMap
-          → (player HP ≤ 0) → GameOver
+BossActive → (deadeye max + puzzle boss) → PuzzleIntro → PuzzleActive → PuzzleResolve → PuzzleExit → BoardPhase
+           → (boss HP ≤ 0) → Victory (2s) → Done → RegionMap
+           → (player HP ≤ 0) → GameOver
+           → (deadeye 0) → 1 damage + reset
 GameOver → (click) → Menu
 ```
 
 ---
 
-## 16. Dev Shortcuts
+## 17. Dev Shortcuts
 
 ### B Key
 - Press `B` at RegionMap or TownSelect screen
 - Skips all menu/level progression
 - Starts a boss fight directly with current region's boss
 - Useful for rapid boss iteration
+
+### Shift + B Key
+- Press `Shift+B` at RegionMap or TownSelect screen
+- Starts Bill the Rustler boss fight with puzzle mode enabled
+- Deadeye starts near-full (95) so puzzle triggers after ~3 matches
+- Useful for rapid puzzle iteration
 
 ### VITE_BOSS_TEST Env Var
 - Set `VITE_BOSS_TEST=1` before starting dev server (or use `npm run dev:boss`)
@@ -569,7 +662,7 @@ GameOver → (click) → Menu
 
 ---
 
-## 17. Project Structure
+## 18. Project Structure
 
 ```
 m3-v2/
@@ -590,8 +683,10 @@ m3-v2/
 │   ├── Board.ts             # Match-3 + cow/lasso/heart
 │   ├── Piece.ts             # Piece types + drawing
 │   ├── Background.ts        # Parallax desert
-│   ├── Boss.ts              # Boss fight orchestrator
+│   ├── Boss.ts              # Boss fight orchestrator (now with puzzle states)
 │   ├── BossPatterns.ts      # Pattern implementations
+│   ├── BossPuzzle.ts        # Boss puzzle interface
+│   ├── BillRustlerPuzzle.ts # Bill the Rustler's specific puzzle
 │   ├── RegionMap.ts         # Region navigation
 │   ├── TownSelect.ts        # Level info
 │   ├── ResultsScreen.ts     # Post-level results
