@@ -33,6 +33,9 @@ export class BossFight {
   puzzle: BossPuzzle | null = null;
   viewShift = 0;
   targetViewShift = 0;
+  nextPuzzleThresholdIndex = 0;
+
+  private readonly thresholdPercentages = [1.0, 0.75, 0.5, 0.25, 0];
 
   onPuzzleDamagePlayer: ((damage: number) => void) | null = null;
   onPuzzleScoreBonus: ((bonus: number) => void) | null = null;
@@ -55,6 +58,7 @@ export class BossFight {
     this.puzzle = null;
     this.viewShift = 0;
     this.targetViewShift = 0;
+    this.nextPuzzleThresholdIndex = 0;
   }
 
   get done(): boolean {
@@ -96,7 +100,12 @@ export class BossFight {
   update(dt: number): void {
     this.timer += dt;
 
-    if (this.health <= 0 && this.state !== BossState.Victory && this.state !== BossState.Done) {
+    if (this.health <= 0 && this.state !== BossState.Victory && this.state !== BossState.Done && this.state !== BossState.PuzzleIntro) {
+      if (this.hasPuzzle && this.nextPuzzleThresholdIndex < this.thresholdPercentages.length) {
+        this.nextPuzzleThresholdIndex++;
+        this.triggerPuzzleIntro();
+        return;
+      }
       this.state = BossState.Victory;
       this.timer = 0;
       return;
@@ -107,9 +116,14 @@ export class BossFight {
     switch (this.state) {
       case BossState.Intro:
         if (this.timer >= CONFIG.boss.introDuration) {
-          this.state = BossState.BoardPhase;
-          this.timer = 0;
-          this.boardPhaseTimer = 0;
+          if (this.hasPuzzle && this.nextPuzzleThresholdIndex === 0) {
+            this.nextPuzzleThresholdIndex++;
+            this.triggerPuzzleIntro();
+          } else {
+            this.state = BossState.BoardPhase;
+            this.timer = 0;
+            this.boardPhaseTimer = 0;
+          }
         }
         break;
 
@@ -119,6 +133,13 @@ export class BossFight {
           this.patterns.triggerNext();
           this.state = BossState.PatternPhase;
           this.boardPhaseTimer = 0;
+        }
+        if (this.hasPuzzle && this.nextPuzzleThresholdIndex < this.thresholdPercentages.length) {
+          const threshold = this.thresholdPercentages[this.nextPuzzleThresholdIndex] * this.maxHealth;
+          if (this.health <= threshold) {
+            this.nextPuzzleThresholdIndex++;
+            this.triggerPuzzleIntro();
+          }
         }
         break;
 
@@ -163,6 +184,14 @@ export class BossFight {
         this.puzzleSlideTimer += dt;
         if (this.puzzleSlideTimer >= CONFIG.puzzle.exitDuration) {
           this.viewShift = 0;
+          while (this.nextPuzzleThresholdIndex < this.thresholdPercentages.length) {
+            const t = this.thresholdPercentages[this.nextPuzzleThresholdIndex] * this.maxHealth;
+            if (this.health <= t) {
+              this.nextPuzzleThresholdIndex++;
+            } else {
+              break;
+            }
+          }
           this.state = BossState.BoardPhase;
           this.timer = 0;
           this.boardPhaseTimer = 0;

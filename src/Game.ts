@@ -181,7 +181,7 @@ export class Game {
     this.score = 0;
     this.combo = 0;
     this.health = CONFIG.game.initialHealth;
-    this.deadeye = puzzleBoss ? CONFIG.game.deadeyeMax - 5 : CONFIG.game.deadeyeDrainReset;
+    this.deadeye = puzzleBoss ? CONFIG.game.deadeyeMax - 5 : 0;
     this.lassos = 0;
     this.shakeIntensity = 0;
     this.shakeDuration = 0;
@@ -422,17 +422,9 @@ export class Game {
           this.state = GameState.RegionMap;
         }
 
-        if (this.boss.state === BossState.BoardPhase) {
-          if (this.deadeye >= CONFIG.game.deadeyeMax && this.boss.hasPuzzle) {
-            this.deadeye = 0;
-            this.boss.triggerPuzzleIntro();
-          } else {
-            this.deadeye -= CONFIG.game.deadeyeDrainRate * dt;
-            if (this.deadeye <= 0) {
-              this.health = Math.max(0, this.health - CONFIG.game.deadeyeDrainDamage);
-              this.deadeye = CONFIG.game.deadeyeDrainReset;
-            }
-          }
+        if (this.boss.state === BossState.BoardPhase && this.deadeye >= CONFIG.game.deadeyeMax && this.boss.hasPuzzle) {
+          this.deadeye = 0;
+          this.boss.triggerPuzzleIntro();
         }
         if (this.health <= 0) {
           this.health = 0;
