@@ -21,6 +21,8 @@ export class BossFight {
   patterns: PatternManager;
   movesPerPattern = 3;
   lastMovesUsed = 0;
+  boardPhaseTimer = 0;
+  boardPhaseTimeout = 15;
 
   constructor() {
     this.patterns = new PatternManager();
@@ -34,6 +36,7 @@ export class BossFight {
     this.bossName = name;
     this.patterns.reset();
     this.lastMovesUsed = 0;
+    this.boardPhaseTimer = 0;
   }
 
   get done(): boolean {
@@ -71,10 +74,17 @@ export class BossFight {
         if (this.timer >= CONFIG.boss.introDuration) {
           this.state = BossState.BoardPhase;
           this.timer = 0;
+          this.boardPhaseTimer = 0;
         }
         break;
 
       case BossState.BoardPhase:
+        this.boardPhaseTimer += dt;
+        if (this.boardPhaseTimer >= this.boardPhaseTimeout) {
+          this.patterns.triggerNext();
+          this.state = BossState.PatternPhase;
+          this.boardPhaseTimer = 0;
+        }
         break;
 
       case BossState.PatternPhase:
@@ -83,6 +93,7 @@ export class BossFight {
           this.health = Math.max(0, this.health - this.patterns.damage);
           this.state = BossState.BoardPhase;
           this.timer = 0;
+          this.boardPhaseTimer = 0;
         }
         break;
 

@@ -100,6 +100,9 @@ export class Game {
       if (this.lassos > 0) {
         this.lassos--;
         this.cowsCaptured++;
+        if (this.state === GameState.BossActive && this.boss.health > 0) {
+          this.boss.health = Math.max(0, this.boss.health - 1);
+        }
         return true;
       }
       return false;
@@ -333,6 +336,17 @@ export class Game {
 
       case GameState.GameOver:
         this.start();
+        break;
+    }
+  }
+
+  handleMouseMove(mx: number, my: number): void {
+    switch (this.state) {
+      case GameState.Playing:
+      case GameState.BossActive:
+        this.board.setHoverCellFromCoords(mx, my);
+        break;
+      default:
         break;
     }
   }

@@ -22,14 +22,21 @@ function loop(now: number): void {
   requestAnimationFrame(loop);
 }
 
-canvas.addEventListener('click', (e: MouseEvent) => {
+function canvasCoords(e: MouseEvent): [number, number] {
   const rect = canvas.getBoundingClientRect();
   const sx = W / rect.width;
   const sy = H / rect.height;
-  const mx = (e.clientX - rect.left) * sx;
-  const my = (e.clientY - rect.top) * sy;
+  return [(e.clientX - rect.left) * sx, (e.clientY - rect.top) * sy];
+}
 
+canvas.addEventListener('click', (e: MouseEvent) => {
+  const [mx, my] = canvasCoords(e);
   game.handleClick(mx, my);
+});
+
+canvas.addEventListener('mousemove', (e: MouseEvent) => {
+  const [mx, my] = canvasCoords(e);
+  game.handleMouseMove(mx, my);
 });
 
 document.addEventListener('keydown', (e: KeyboardEvent) => {

@@ -19,6 +19,7 @@ export class Board {
   pieces: Piece[];
 
   selected: Piece | null;
+  hoverCell: { col: number; row: number } | null = null;
   swapPair: [Piece, Piece] | null;
   isSwapBack: boolean;
   phase: BoardPhase;
@@ -174,6 +175,86 @@ export class Board {
     return count;
   }
 
+  private countHorizontal(r: number, c: number, type: number): number {
+    let count = 0;
+    for (let i = c - 1; i >= 0 && this.grid[r]?.[i]?.type === type; i--) count++;
+    for (let i = c + 1; i < this.cols && this.grid[r]?.[i]?.type === type; i++) count++;
+    return count;
+  }
+
+  private countVertical(r: number, c: number, type: number): number {
+    let count = 0;
+    for (let i = r - 1; i >= 0 && this.grid[i]?.[c]?.type === type; i--) count++;
+    for (let i = r + 1; i < this.rows && this.grid[i]?.[c]?.type === type; i++) count++;
+    return count;
+  }
+
+  isDeadlocked(): boolean {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const p = this.grid[r][c];
+        if (!p || this.isSpecialType(p.type)) continue;
+
+        if (c < this.cols - 1) {
+          const right = this.grid[r][c + 1];
+          if (right && !this.isSpecialType(right.type)) {
+            this.grid[r][c] = right;
+            this.grid[r][c + 1] = p;
+            const matchFound =
+              this.countHorizontal(r, c, right.type) >= 2 ||
+              this.countVertical(r, c, right.type) >= 2 ||
+              this.countHorizontal(r, c + 1, p.type) >= 2 ||
+              this.countVertical(r, c + 1, p.type) >= 2;
+            this.grid[r][c] = p;
+            this.grid[r][c + 1] = right;
+            if (matchFound) return false;
+          }
+        }
+
+        if (r < this.rows - 1) {
+          const down = this.grid[r + 1][c];
+          if (down && !this.isSpecialType(down.type)) {
+            this.grid[r][c] = down;
+            this.grid[r + 1][c] = p;
+            const matchFound =
+              this.countHorizontal(r, c, down.type) >= 2 ||
+              this.countVertical(r, c, down.type) >= 2 ||
+              this.countHorizontal(r + 1, c, p.type) >= 2 ||
+              this.countVertical(r + 1, c, p.type) >= 2;
+            this.grid[r][c] = p;
+            this.grid[r + 1][c] = down;
+            if (matchFound) return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  reshuffle(): void {
+    const positions: { col: number; row: number }[] = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const p = this.grid[r][c];
+        if (p && !this.isSpecialType(p.type) && !p.removing) {
+          positions.push({ col: c, row: r });
+          p.removing = true;
+          p.removeProgress = 1;
+        }
+      }
+    }
+
+    for (const { col, row } of positions) {
+      let t: number;
+      do {
+        t = Math.floor(Math.random() * CONFIG.game.regularTypeCount);
+      } while (this.wouldMatch(col, row, t));
+      const piece = new Piece(col, row, t);
+      this.grid[row][col] = piece;
+      this.pieces.push(piece);
+    }
+  }
+
   get canPlay(): boolean {
     return !this.levelComplete;
   }
@@ -218,6 +299,16 @@ export class Board {
 
   private isSpecialType(type: number): boolean {
     return type === COW_TYPE || type === LASSO_TYPE;
+  }
+
+  setHoverCellFromCoords(mx: number, my: number): void {
+    const c = Math.floor((mx - this.ox) / this.cellSize);
+    const r = Math.floor((my - this.oy) / this.cellSize);
+    if (c >= 0 && c < this.cols && r >= 0 && r < this.rows && this.grid[r]?.[c] && !this.grid[r][c]!.removing) {
+      this.hoverCell = { col: c, row: r };
+    } else {
+      this.hoverCell = null;
+    }
   }
 
   handleClick(mx: number, my: number, effects: EffectManager): void {
@@ -597,6 +688,9 @@ export class Board {
               this.spawnSingleCow();
               this.collectBottomCows();
             }
+            if (!this.isBossLevel && this.isDeadlocked()) {
+              this.reshuffle();
+            }
           }
         }
         break;
@@ -623,6 +717,13 @@ export class Board {
         ctx.lineWidth = 1;
         ctx.strokeRect(x, y, cellSize, cellSize);
       }
+    }
+
+    if (this.hoverCell && this.phase === BoardPhase.Idle) {
+      const x = ox + this.hoverCell.col * cellSize;
+      const y = oy + this.hoverCell.row * cellSize;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.fillRect(x, y, cellSize, cellSize);
     }
 
     for (const p of this.pieces) {
