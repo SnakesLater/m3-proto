@@ -40,6 +40,7 @@ export class BossFight {
 
   onPuzzleDamagePlayer: ((damage: number) => void) | null = null;
   onPuzzleScoreBonus: ((bonus: number) => void) | null = null;
+  onTurnPenalty: ((n: number) => void) | null = null;
 
   constructor() {
     this.patterns = new PatternManager();
@@ -182,6 +183,9 @@ export class BossFight {
           }
           if (this.onPuzzleScoreBonus && r.scoreBonus > 0) {
             this.onPuzzleScoreBonus(r.scoreBonus);
+          }
+          if (this.onTurnPenalty && r.turnPenalty > 0) {
+            this.onTurnPenalty(r.turnPenalty);
           }
           this.health = Math.max(0, this.health - r.bossDamage);
           this.puzzleDamageApplied = true;

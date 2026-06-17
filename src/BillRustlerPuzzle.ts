@@ -4,18 +4,21 @@ import { CONFIG } from './config';
 const W = CONFIG.canvas.width;
 const H = CONFIG.canvas.height;
 
+const TELEGRAPH_DURATION = 3.0;
+const RESOLVE_DURATION = 2.0;
+
 const COW_NAMES = [
   'Bessie', 'Clover', 'Daisy', 'Buttercup',
   'Mabel', 'Hazel', 'Maple', 'Willow',
   'Penny', 'Ruby',
 ];
 
-type LocationId = 'cow_left' | 'cow_right' | 'shed';
+type SlotType = 'cow' | 'outhouse' | 'ranch_house' | 'shed';
 type ActionId = 'revolver' | 'dynamite';
 
-interface LocationDef {
-  id: LocationId;
-  label: string;
+const ALL_TYPES: SlotType[] = ['cow', 'outhouse', 'ranch_house', 'shed'];
+
+interface PositionDef {
   x: number;
   y: number;
   w: number;
@@ -42,25 +45,16 @@ export class BillRustlerPuzzle implements BossPuzzle {
   readonly name = 'Bill the Rustler';
   private state = PuzzleState.Telegraph;
   private timer = 0;
-  private telegraphLocation: LocationId = 'cow_left';
+  private selectedSlot = -1;
   private chosenAction: ActionId | null = null;
   private _done = false;
-  private _result: BossPuzzleResult = { bossDamage: 0, playerDamage: 0, scoreBonus: 0, narrativeLine: '' };
+  private _result: BossPuzzleResult = { bossDamage: 0, playerDamage: 0, scoreBonus: 0, narrativeLine: '', turnPenalty: 0 };
   private _hasResult = false;
-  private cowNameMap: Map<LocationId, string> = new Map();
-  private billLocation: LocationId = 'cow_left';
-  private selectedLocation: LocationId | null = null;
-  private locDestroyed: Record<LocationId, boolean> = {
-    cow_left: false,
-    cow_right: false,
-    shed: false,
-  };
-  private encounterCount = 0;
 
-  private readonly locations: LocationDef[] = [
-    { id: 'cow_left', label: '', x: 60, y: 200, w: 220, h: 200 },
-    { id: 'cow_right', label: '', x: 370, y: 200, w: 220, h: 200 },
-    { id: 'shed', label: 'Old Barn', x: 680, y: 200, w: 220, h: 200 },
+  private readonly positions: PositionDef[] = [
+    { x: 60, y: 200, w: 220, h: 200 },
+    { x: 370, y: 200, w: 220, h: 200 },
+    { x: 680, y: 200, w: 220, h: 200 },
   ];
 
   private readonly actions: ActionDef[] = [
@@ -68,43 +62,97 @@ export class BillRustlerPuzzle implements BossPuzzle {
     { id: 'revolver', label: 'Revolver', x: 480, y: 470, w: 200, h: 50 },
   ];
 
+  posTypes: (SlotType | null)[] = [null, null, null];
+  billPosition = -1;
+  telegraphPosition = -1;
+  posDestroyed: boolean[] = [false, false, false];
+  posCowNames: (string | null)[] = [null, null, null];
+  usedCowNames: string[] = [];
+
   get done(): boolean { return this._done; }
   get hasResult(): boolean { return this._hasResult; }
   get result(): BossPuzzleResult { return this._result; }
 
-  private pickBillLocation(): void {
-    const ids: LocationId[] = ['cow_left', 'cow_right', 'shed'];
-    this.billLocation = ids[Math.floor(Math.random() * ids.length)];
-  }
+  private assignEncounter(): void {
+    const alive = this.posDestroyed.map((d, i) => d ? -1 : i).filter(i => i >= 0);
 
-  private pickTelegraphLocation(): void {
-    const ids: LocationId[] = ['cow_left', 'cow_right', 'shed'];
+    if (alive.length === 0) {
+      this._result = {
+        bossDamage: 2,
+        playerDamage: 0,
+        scoreBonus: 0,
+        narrativeLine: 'Bill has nowhere left to hide! You take the free shot.',
+        turnPenalty: 0,
+      };
+      this._hasResult = true;
+      this.state = PuzzleState.Resolve;
+      this.timer = 0;
+      return;
+    }
+
+    const pool = [...ALL_TYPES];
+    for (let i = 0; i < alive.length; i++) {
+      const idx = Math.floor(Math.random() * pool.length);
+      this.posTypes[alive[i]] = pool.splice(idx, 1)[0];
+    }
+
+    for (const i of alive) {
+      if (this.posTypes[i] === 'cow') {
+        const unused = COW_NAMES.filter(n => !this.usedCowNames.includes(n));
+        if (unused.length > 0) {
+          const name = unused[Math.floor(Math.random() * unused.length)];
+          this.posCowNames[i] = name;
+        } else {
+          this.posTypes[i] = null;
+          this.posDestroyed[i] = true;
+        }
+      } else {
+        this.posCowNames[i] = null;
+      }
+    }
+
+    const stillAlive = this.posDestroyed.map((d, i) => d ? -1 : i).filter(i => i >= 0);
+
+    if (stillAlive.length === 0) {
+      this._result = {
+        bossDamage: 2,
+        playerDamage: 0,
+        scoreBonus: 0,
+        narrativeLine: 'All hiding spots are gone! Bill is exposed.',
+        turnPenalty: 0,
+      };
+      this._hasResult = true;
+      this.state = PuzzleState.Resolve;
+      this.timer = 0;
+      return;
+    }
+
+    this.billPosition = stillAlive[Math.floor(Math.random() * stillAlive.length)];
+
     if (Math.random() < 0.5) {
-      this.telegraphLocation = this.billLocation;
+      this.telegraphPosition = this.billPosition;
     } else {
-      const others = ids.filter(l => l !== this.billLocation);
-      this.telegraphLocation = others[Math.floor(Math.random() * others.length)];
+      const others = stillAlive.filter(i => i !== this.billPosition);
+      if (others.length > 0) {
+        this.telegraphPosition = others[Math.floor(Math.random() * others.length)];
+      } else {
+        this.telegraphPosition = this.billPosition;
+      }
     }
   }
 
-  private assignCowNames(): void {
-    const shuffled = [...COW_NAMES].sort(() => Math.random() - 0.5);
-    this.cowNameMap.clear();
-    this.cowNameMap.set('cow_left', shuffled[0 % shuffled.length]);
-    this.cowNameMap.set('cow_right', shuffled[1 % shuffled.length]);
-  }
-
   start(): void {
-    this.encounterCount++;
     this.state = PuzzleState.Telegraph;
     this.timer = 0;
+    this.selectedSlot = -1;
     this.chosenAction = null;
-    this.selectedLocation = null;
     this._done = false;
     this._hasResult = false;
-    this.pickBillLocation();
-    this.pickTelegraphLocation();
-    this.assignCowNames();
+
+    this.posTypes = [null, null, null];
+    this.posCowNames = [null, null, null];
+
+    this.assignEncounter();
   }
 
   update(dt: number): void {
@@ -112,14 +160,14 @@ export class BillRustlerPuzzle implements BossPuzzle {
 
     switch (this.state) {
       case PuzzleState.Telegraph:
-        if (this.timer >= 1.5) {
+        if (this.timer >= TELEGRAPH_DURATION) {
           this.timer = 0;
           this.state = PuzzleState.Choice;
         }
         break;
 
       case PuzzleState.Resolve:
-        if (this.timer >= 2.0) {
+        if (this.timer >= RESOLVE_DURATION) {
           this._done = true;
         }
         break;
@@ -129,14 +177,15 @@ export class BillRustlerPuzzle implements BossPuzzle {
   handleClick(mx: number, my: number): boolean {
     if (this.state !== PuzzleState.Choice) return false;
 
-    for (const loc of this.locations) {
-      if (mx >= loc.x && mx <= loc.x + loc.w && my >= loc.y && my <= loc.y + loc.h) {
-        this.selectedLocation = loc.id;
+    for (let i = 0; i < this.positions.length; i++) {
+      const p = this.positions[i];
+      if (mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h) {
+        this.selectedSlot = i;
         return true;
       }
     }
 
-    if (this.selectedLocation) {
+    if (this.selectedSlot >= 0) {
       for (const a of this.actions) {
         if (mx >= a.x && mx <= a.x + a.w && my >= a.y && my <= a.y + a.h) {
           this.chosenAction = a.id;
@@ -153,62 +202,119 @@ export class BillRustlerPuzzle implements BossPuzzle {
 
   private resolve(): void {
     const action = this.chosenAction!;
-    const target = this.selectedLocation!;
+    const slot = this.selectedSlot;
+    const destroyed = this.posDestroyed[slot];
+    const type = this.posTypes[slot];
 
-    if (target === this.billLocation) {
-      if (action === 'revolver' && target !== 'shed' && !this.locDestroyed[target]) {
+    if (this.billPosition === slot) {
+      if (destroyed) {
+        this._result = {
+          bossDamage: 2,
+          playerDamage: 0,
+          scoreBonus: 50,
+          narrativeLine: 'Bill is exposed in the open! Easy shot.',
+          turnPenalty: 0,
+        };
+      } else if (action === 'dynamite') {
+        this.posDestroyed[slot] = true;
+        if (type === 'cow') {
+          for (let i = 0; i < this.posDestroyed.length; i++) {
+            if (this.posTypes[i] === 'cow') this.posDestroyed[i] = true;
+          }
+        }
+        this._result = {
+          bossDamage: 10,
+          playerDamage: 0,
+          scoreBonus: 100,
+          narrativeLine: 'Dynamite at his feet! Bill takes a massive blast.',
+          turnPenalty: 0,
+        };
+      } else if (type === 'cow') {
         const hitBill = Math.random() < 0.7;
         if (hitBill) {
           this._result = {
             bossDamage: 2,
             playerDamage: 0,
             scoreBonus: 100,
-            narrativeLine: `You nail Bill through the brush! The ${this.cowNameMap.get(target) || 'cow'} startles but Bill takes the hit.`,
+            narrativeLine: `You nail Bill through the ${this.posCowNames[slot] || 'cow'}! Clean hit.`,
+            turnPenalty: 0,
           };
         } else {
-          this.locDestroyed[target] = true;
+          this.usedCowNames.push(this.posCowNames[slot] || '');
+          this._result = {
+            bossDamage: 1,
+            playerDamage: 0,
+            scoreBonus: 0,
+            narrativeLine: `The ${this.posCowNames[slot] || 'cow'} deflects your shot! Bill is grazed.`,
+            turnPenalty: 1,
+          };
+        }
+      } else {
+        this._result = {
+          bossDamage: 2,
+          playerDamage: 0,
+          scoreBonus: 100,
+          narrativeLine: 'Your shot finds Bill cold!',
+          turnPenalty: 0,
+        };
+      }
+    } else {
+      if (action === 'dynamite') {
+        this.posDestroyed[slot] = true;
+        if (type === 'cow') {
+          for (let i = 0; i < this.posDestroyed.length; i++) {
+            if (this.posTypes[i] === 'cow') this.posDestroyed[i] = true;
+          }
+        }
+        const noun = type === 'cow'
+          ? 'cow field'
+          : type === 'outhouse'
+            ? 'outhouse'
+            : type === 'ranch_house'
+              ? 'ranch house'
+              : 'barn';
+        this._result = {
+          bossDamage: 0,
+          playerDamage: 0,
+          scoreBonus: 0,
+          narrativeLine: `The ${noun} is destroyed! Bill wasn't there.`,
+          turnPenalty: 1,
+        };
+      } else {
+        if (type === 'cow') {
+          this.usedCowNames.push(this.posCowNames[slot] || '');
           this._result = {
             bossDamage: 0,
             playerDamage: 0,
             scoreBonus: 0,
-            narrativeLine: `Your shot clips the ${this.cowNameMap.get(target) || 'cow'} instead! The cow bolts, leaving an empty field.`,
+            narrativeLine: `The ${this.posCowNames[slot] || 'cow'} bolts! Bill's not here.`,
+            turnPenalty: 1,
+          };
+        } else if (type === 'shed') {
+          this._result = {
+            bossDamage: 0,
+            playerDamage: 0,
+            scoreBonus: 0,
+            narrativeLine: 'The barn is empty. Bill\'s not here.',
+            turnPenalty: 1,
+          };
+        } else if (type === 'ranch_house') {
+          this._result = {
+            bossDamage: 0,
+            playerDamage: 0,
+            scoreBonus: 0,
+            narrativeLine: 'The ranch house is quiet. Bill\'s playing games.',
+            turnPenalty: 1,
+          };
+        } else {
+          this._result = {
+            bossDamage: 0,
+            playerDamage: 0,
+            scoreBonus: 0,
+            narrativeLine: 'The outhouse is empty. Nice try.',
+            turnPenalty: 1,
           };
         }
-        return;
-      }
-
-      if (action === 'dynamite') {
-        this.locDestroyed[target] = true;
-      }
-
-      this._result = {
-        bossDamage: action === 'dynamite' ? 10 : 2,
-        playerDamage: 0,
-        scoreBonus: 100,
-        narrativeLine: action === 'dynamite'
-          ? 'The dynamite lands at his feet! Bill takes the blast.'
-          : 'Your shot finds Bill cold!',
-      };
-    } else {
-      if (action === 'dynamite') {
-        this.locDestroyed[target] = true;
-        this._result = {
-          bossDamage: 0,
-          playerDamage: 0,
-          scoreBonus: 0,
-          narrativeLine: target === 'shed'
-            ? 'The barn goes up in flames! That hiding spot is gone.'
-            : `The ${this.cowNameMap.get(target) || 'cow'} field is blown to bits! Bill will have fewer places to hide.`,
-        };
-      } else {
-        this._result = {
-          bossDamage: 0,
-          playerDamage: 0,
-          scoreBonus: 0,
-          narrativeLine: target === 'shed'
-            ? 'You kick the barn door open — empty. Bill\'s not here.'
-            : `The ${this.cowNameMap.get(target) || 'cow'} moos in protest. No sign of Bill.`,
-        };
       }
     }
 
@@ -224,11 +330,11 @@ export class BillRustlerPuzzle implements BossPuzzle {
     ctx.textAlign = 'center';
     ctx.fillText('DEADEYE — Bill the Rustler', W / 2, 40);
 
-    this.drawLocations(ctx);
+    this.drawSlots(ctx);
 
     if (this.state === PuzzleState.Choice) {
       this.drawPrompt(ctx);
-      if (this.selectedLocation) {
+      if (this.selectedSlot >= 0) {
         this.drawActions(ctx);
       }
     }
@@ -245,28 +351,33 @@ export class BillRustlerPuzzle implements BossPuzzle {
     ctx.font = '16px Courier New';
     ctx.textAlign = 'center';
 
-    if (this.selectedLocation) {
-      const name = this.cowNameMap.get(this.selectedLocation) || 'the barn';
-      const destroyed = this.locDestroyed[this.selectedLocation];
-      const locName = destroyed
-        ? (this.selectedLocation === 'shed' ? 'the wreckage' : 'the empty field')
-        : name;
-      ctx.fillText(`Targeting ${locName} — pick your weapon:`, W / 2, 440);
+    if (this.selectedSlot >= 0) {
+      const type = this.posTypes[this.selectedSlot];
+      const destroyed = this.posDestroyed[this.selectedSlot];
+      const name = destroyed ? 'the ruins' : (
+        type === 'cow' ? (this.posCowNames[this.selectedSlot] || 'a cow') :
+        type === 'shed' ? 'the barn' :
+        type === 'ranch_house' ? 'the ranch house' :
+        'the outhouse'
+      );
+      ctx.fillText(`Targeting ${name} — pick your weapon:`, W / 2, 440);
     } else {
-      ctx.fillText('Click a location to target:', W / 2, 440);
+      ctx.fillText('Click a spot to target:', W / 2, 440);
     }
   }
 
-  private drawLocations(ctx: CanvasRenderingContext2D): void {
-    for (const loc of this.locations) {
-      const destroyed = this.locDestroyed[loc.id];
-      const hasBill = loc.id === this.billLocation;
-      const isTelegraph = loc.id === this.telegraphLocation;
-      const isSelected = loc.id === this.selectedLocation;
+  private drawSlots(ctx: CanvasRenderingContext2D): void {
+    for (let i = 0; i < this.positions.length; i++) {
+      const pos = this.positions[i];
+      const type = this.posTypes[i];
+      const destroyed = this.posDestroyed[i];
+      const hasBill = i === this.billPosition;
+      const isTelegraph = i === this.telegraphPosition;
+      const isSelected = i === this.selectedSlot;
       const pulse = 0.3 + Math.sin(this.timer * 4) * 0.2;
 
       ctx.fillStyle = destroyed ? '#1a2a1a' : (isTelegraph ? '#3a1a1a' : '#2a1a0a');
-      ctx.fillRect(loc.x, loc.y, loc.w, loc.h);
+      ctx.fillRect(pos.x, pos.y, pos.w, pos.h);
 
       if (isSelected) {
         ctx.strokeStyle = '#ffd700';
@@ -278,44 +389,84 @@ export class BillRustlerPuzzle implements BossPuzzle {
         ctx.strokeStyle = destroyed ? '#3a5c3a' : '#5c3a21';
         ctx.lineWidth = 1;
       }
-      ctx.strokeRect(loc.x, loc.y, loc.w, loc.h);
+      ctx.strokeRect(pos.x, pos.y, pos.w, pos.h);
 
       ctx.textAlign = 'center';
 
       if (destroyed) {
-        if (loc.id === 'shed') {
-          this.drawWreckedBarn(ctx, loc.x + loc.w / 2, loc.y + loc.h / 2);
-        } else {
-          this.drawGrass(ctx, loc.x + loc.w / 2, loc.y + loc.h / 2);
-        }
-        if (hasBill) {
-          this.drawBillSilhouette(ctx, loc.x + loc.w / 2, loc.y + loc.h / 2);
-        }
-        ctx.fillStyle = hasBill ? '#ff6666' : '#667766';
-        ctx.font = 'bold 12px Courier New';
-        const caption = hasBill
-          ? (loc.id === 'shed' ? 'HOSTILE IN RUINS' : 'BILL IN THE FIELD')
-          : (loc.id === 'shed' ? '— RUINS —' : '— EMPTY —');
-        ctx.fillText(caption, loc.x + loc.w / 2, loc.y + loc.h - 15);
-      } else {
-        const displayName = loc.id === 'shed' ? loc.label : (this.cowNameMap.get(loc.id) || loc.id);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px Courier New';
-        ctx.fillText(displayName, loc.x + loc.w / 2, loc.y + 30);
-        if (loc.id === 'cow_left' || loc.id === 'cow_right') {
-          this.drawCowIcon(ctx, loc.x + loc.w / 2, loc.y + 100);
-        } else {
-          this.drawShedIcon(ctx, loc.x + loc.w / 2, loc.y + 100);
-        }
+        this.drawDestroyedSlot(ctx, pos, type, hasBill);
+      } else if (type === 'cow') {
+        this.drawCowSlot(ctx, pos, this.posCowNames[i] || 'cow');
+      } else if (type === 'shed') {
+        this.drawBuildingSlot(ctx, pos, 'Old Barn', false);
+      } else if (type === 'ranch_house') {
+        this.drawBuildingSlot(ctx, pos, 'Ranch House', true);
+      } else if (type === 'outhouse') {
+        this.drawBuildingSlot(ctx, pos, 'Outhouse', false);
       }
 
-      if (isTelegraph && (this.state === PuzzleState.Telegraph || this.state === PuzzleState.Choice)) {
+      if (!destroyed && isTelegraph && (this.state === PuzzleState.Telegraph || this.state === PuzzleState.Choice)) {
         ctx.fillStyle = `rgba(255, 0, 0, ${pulse * 0.3})`;
-        ctx.fillRect(loc.x, loc.y, loc.w, loc.h);
+        ctx.fillRect(pos.x, pos.y, pos.w, pos.h);
         ctx.fillStyle = '#ff4444';
         ctx.font = 'bold 16px Courier New';
-        ctx.fillText('??? MOVEMENT ???', loc.x + loc.w / 2, loc.y + 170);
+        ctx.fillText('??? MOVEMENT ???', pos.x + pos.w / 2, pos.y + 170);
       }
+    }
+  }
+
+  private drawDestroyedSlot(ctx: CanvasRenderingContext2D, pos: PositionDef, wasType: SlotType | null, hasBill: boolean): void {
+    const cx = pos.x + pos.w / 2;
+    const cy = pos.y + pos.h / 2;
+
+    if (wasType === 'shed') {
+      this.drawWreckedBarn(ctx, cx, cy);
+    } else if (wasType === 'ranch_house') {
+      this.drawWreckedRanchHouse(ctx, cx, cy);
+    } else if (wasType === 'outhouse') {
+      this.drawWreckedOuthouse(ctx, cx, cy);
+    } else {
+      this.drawGrass(ctx, cx, cy);
+    }
+
+    if (hasBill) {
+      this.drawBillSilhouette(ctx, cx, cy);
+    }
+
+    ctx.fillStyle = hasBill ? '#ff6666' : '#667766';
+    ctx.font = 'bold 12px Courier New';
+    const caption = hasBill ? 'HOSTILE SPOTTED' : (
+      wasType === 'shed' ? '— RUINS —' :
+      wasType === 'ranch_house' ? '— BURNT —' :
+      wasType === 'outhouse' ? '— SPLINTERED —' :
+      '— EMPTY —'
+    );
+    ctx.fillText(caption, pos.x + pos.w / 2, pos.y + pos.h - 15);
+  }
+
+  private drawCowSlot(ctx: CanvasRenderingContext2D, pos: PositionDef, name: string): void {
+    const cx = pos.x + pos.w / 2;
+    const cy = pos.y + pos.h / 2;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(name, cx, pos.y + 30);
+    this.drawCowIcon(ctx, cx, cy - 20);
+  }
+
+  private drawBuildingSlot(ctx: CanvasRenderingContext2D, pos: PositionDef, label: string, isRanch: boolean): void {
+    const cx = pos.x + pos.w / 2;
+    const cy = pos.y + pos.h / 2;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, cx, pos.y + 30);
+    if (isRanch) {
+      this.drawRanchHouse(ctx, cx, cy);
+    } else if (label === 'Outhouse') {
+      this.drawOuthouse(ctx, cx, cy);
+    } else {
+      this.drawShedIcon(ctx, cx, cy - 20);
     }
   }
 
@@ -392,6 +543,102 @@ export class BillRustlerPuzzle implements BossPuzzle {
     ctx.moveTo(cx - 50, cy + 20);
     ctx.lineTo(cx + 50, cy + 20);
     ctx.stroke();
+  }
+
+  private drawWreckedRanchHouse(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    ctx.fillStyle = '#2a1a1a';
+    ctx.fillRect(cx - 60, cy - 15, 120, 55);
+    ctx.strokeStyle = '#4a2a1a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cx - 60, cy - 15, 120, 55);
+
+    ctx.strokeStyle = '#3a1a0a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - 55, cy - 15);
+    ctx.lineTo(cx - 30, cy - 30);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + 55, cy - 15);
+    ctx.lineTo(cx + 30, cy - 30);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx - 50, cy + 25);
+    ctx.lineTo(cx + 50, cy + 25);
+    ctx.stroke();
+
+    const t = this.timer;
+    ctx.fillStyle = `rgba(255, 80, 10, ${0.2 + Math.sin(t * 2.5) * 0.15})`;
+    ctx.beginPath();
+    ctx.arc(cx - 20, cy + 10, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx + 15, cy + 15, 7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  private drawWreckedOuthouse(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(cx - 25, cy - 5, 50, 40);
+    ctx.fillStyle = '#5a3a21';
+    ctx.beginPath();
+    ctx.moveTo(cx - 28, cy - 5);
+    ctx.lineTo(cx, cy - 25);
+    ctx.lineTo(cx + 28, cy - 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#2a1a0a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - 25, cy + 30);
+    ctx.lineTo(cx - 10, cy + 5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + 25, cy + 30);
+    ctx.lineTo(cx + 10, cy + 5);
+    ctx.stroke();
+    ctx.fillStyle = '#1a1a0a';
+    ctx.fillRect(cx - 12, cy + 5, 8, 20);
+  }
+
+  private drawRanchHouse(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    ctx.fillStyle = '#5c3a21';
+    ctx.fillRect(cx - 50, cy - 15, 100, 55);
+    ctx.fillStyle = '#8b6914';
+    ctx.beginPath();
+    ctx.moveTo(cx - 55, cy - 15);
+    ctx.lineTo(cx, cy - 45);
+    ctx.lineTo(cx + 55, cy - 15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#3a1a0a';
+    ctx.fillRect(cx - 15, cy + 10, 12, 30);
+    ctx.fillRect(cx + 15, cy + 5, 8, 15);
+    ctx.fillStyle = '#4a2a1a';
+    ctx.fillRect(cx - 45, cy + 35, 12, 5);
+    ctx.fillRect(cx + 33, cy + 35, 12, 5);
+    ctx.fillStyle = '#2a1a0a';
+    ctx.beginPath();
+    ctx.arc(cx + 50, cy, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(cx + 48, cy - 20, 4, 20);
+  }
+
+  private drawOuthouse(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    ctx.fillStyle = '#5c3a21';
+    ctx.fillRect(cx - 20, cy - 10, 40, 40);
+    ctx.fillStyle = '#8b6914';
+    ctx.beginPath();
+    ctx.moveTo(cx - 23, cy - 10);
+    ctx.lineTo(cx, cy - 28);
+    ctx.lineTo(cx + 23, cy - 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#3a1a0a';
+    ctx.beginPath();
+    ctx.arc(cx + 8, cy + 12, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(cx - 8, cy + 5, 16, 20);
   }
 
   private drawCowIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
@@ -485,6 +732,12 @@ export class BillRustlerPuzzle implements BossPuzzle {
     if (this._result.scoreBonus > 0) {
       ctx.fillStyle = '#ffd700';
       ctx.fillText(`Score: +${this._result.scoreBonus}`, W / 2, H / 2 + 60);
+    }
+
+    if (this._result.turnPenalty > 0) {
+      ctx.fillStyle = '#ff6644';
+      ctx.font = 'bold 16px Courier New';
+      ctx.fillText(`-${this._result.turnPenalty} Turn`, W / 2, H / 2 + 90);
     }
   }
 }

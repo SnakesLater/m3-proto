@@ -3,6 +3,7 @@ export interface BossPuzzleResult {
   playerDamage: number;
   scoreBonus: number;
   narrativeLine: string;
+  turnPenalty: number;
 }
 
 export interface BossPuzzle {

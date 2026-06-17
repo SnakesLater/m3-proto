@@ -204,6 +204,9 @@ export class Game {
       this.boss.onPuzzleScoreBonus = (bonus) => {
         this.score += bonus;
       };
+      this.boss.onTurnPenalty = (n) => {
+        this.board.turnBudget = Math.max(0, this.board.turnBudget - n);
+      };
     } else {
       const bill = new BillRustlerPuzzle();
       this.boss.start(region.boss.health, region.boss.name);
@@ -213,6 +216,9 @@ export class Game {
       };
       this.boss.onPuzzleScoreBonus = (bonus) => {
         this.score += bonus;
+      };
+      this.boss.onTurnPenalty = (n) => {
+        this.board.turnBudget = Math.max(0, this.board.turnBudget - n);
       };
     }
 
