@@ -182,7 +182,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
       }
 
       this._result = {
-        bossDamage: 2,
+        bossDamage: action === 'dynamite' ? 10 : 2,
         playerDamage: 0,
         scoreBonus: 100,
         narrativeLine: action === 'dynamite'

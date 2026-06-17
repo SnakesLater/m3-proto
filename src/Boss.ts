@@ -34,6 +34,7 @@ export class BossFight {
   viewShift = 0;
   targetViewShift = 0;
   nextPuzzleThresholdIndex = 0;
+  puzzleDamageApplied = false;
 
   private readonly thresholdPercentages = [1.0, 0.75, 0.5, 0.25, 0];
 
@@ -59,6 +60,7 @@ export class BossFight {
     this.viewShift = 0;
     this.targetViewShift = 0;
     this.nextPuzzleThresholdIndex = 0;
+    this.puzzleDamageApplied = false;
   }
 
   get done(): boolean {
@@ -173,10 +175,22 @@ export class BossFight {
         break;
 
       case BossState.PuzzleResolve:
+        if (this.puzzle && this.puzzle.hasResult && !this.puzzleDamageApplied) {
+          const r = this.puzzle.result;
+          if (this.onPuzzleDamagePlayer && r.playerDamage > 0) {
+            this.onPuzzleDamagePlayer(r.playerDamage);
+          }
+          if (this.onPuzzleScoreBonus && r.scoreBonus > 0) {
+            this.onPuzzleScoreBonus(r.scoreBonus);
+          }
+          this.health = Math.max(0, this.health - r.bossDamage);
+          this.puzzleDamageApplied = true;
+        }
         if (this.timer >= CONFIG.puzzle.resolveDuration) {
           this.state = BossState.PuzzleExit;
           this.targetViewShift = 0;
           this.puzzleSlideTimer = 0;
+          this.puzzleDamageApplied = false;
         }
         break;
 
@@ -279,15 +293,7 @@ export class BossFight {
       }
 
       case BossState.PuzzleResolve: {
-        if (this.puzzle && this.puzzle.hasResult) {
-          const r = this.puzzle.result;
-          if (this.onPuzzleDamagePlayer && r.playerDamage > 0) {
-            this.onPuzzleDamagePlayer(r.playerDamage);
-          }
-          if (this.onPuzzleScoreBonus && r.scoreBonus > 0) {
-            this.onPuzzleScoreBonus(r.scoreBonus);
-          }
-          this.health = Math.max(0, this.health - r.bossDamage);
+        if (this.puzzle) {
           this.puzzle.draw(ctx);
         }
         break;
