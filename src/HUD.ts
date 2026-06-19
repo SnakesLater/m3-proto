@@ -1,4 +1,5 @@
 import { CONFIG } from './config';
+import { drawSpriteCentered } from './assets/draw';
 
 const W = CONFIG.canvas.width;
 
@@ -29,14 +30,16 @@ export class HUD {
 
     this.drawDeadeyeMeter(ctx, deadeye, deadeyeMax);
 
+    drawSpriteCentered(ctx, 'terry_revolver', 0, 35, 35, 30);
+
     ctx.textAlign = 'left';
     ctx.fillStyle = CONFIG.colors.hudGold;
     ctx.font = 'bold 20px Courier New';
-    ctx.fillText(`SCORE: ${Math.floor(score)}`, 10, 28);
+    ctx.fillText(`SCORE: ${Math.floor(score)}`, 60, 28);
 
     ctx.fillStyle = CONFIG.colors.hudGray;
     ctx.font = '14px Courier New';
-    ctx.fillText(`GOAL: ${scoreTarget}`, 10, 46);
+    ctx.fillText(`GOAL: ${scoreTarget}`, 60, 46);
 
     ctx.textAlign = 'right';
     ctx.fillStyle = CONFIG.colors.hudWhite;
@@ -46,11 +49,13 @@ export class HUD {
     ctx.textAlign = 'left';
     ctx.fillStyle = CONFIG.colors.hudWhite;
     ctx.font = '20px Courier New';
-    ctx.fillText(`LVL: ${level}`, 10, 72);
+    ctx.fillText(`LVL: ${level}`, 60, 72);
+
+    drawSpriteCentered(ctx, 'terry_belt', 3, 35, 82, 20);
 
     ctx.fillStyle = '#c49a6c';
     ctx.font = '18px Courier New';
-    ctx.fillText(`LASSOS: ${lassos}/${CONFIG.game.lassoMax}`, 10, 96);
+    ctx.fillText(`LASSOS: ${lassos}/${CONFIG.game.lassoMax}`, 60, 96);
 
     if (data.isBossLevel) {
       ctx.fillStyle = '#ff4444';
@@ -95,6 +100,8 @@ export class HUD {
     ctx.fillStyle = hgrad;
     ctx.fillRect(hx + 1, hy + 1, bw - 2, hh - 2);
 
+    drawSpriteCentered(ctx, 'health_ui', 0, hx + hw + 14, hy + hh / 2, 20);
+
     ctx.fillStyle = CONFIG.colors.gunBody;
     ctx.font = 'bold 13px Courier New';
     ctx.textAlign = 'center';
@@ -125,6 +132,8 @@ export class HUD {
     ctx.strokeStyle = '#5c3a21';
     ctx.lineWidth = 1;
     ctx.strokeRect(bx, by, bw, bh);
+
+    drawSpriteCentered(ctx, 'piece_star', 0, bx - 14, by + bh / 2, 14);
 
     ctx.fillStyle = CONFIG.colors.hudWhite;
     ctx.font = 'bold 10px Courier New';

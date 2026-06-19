@@ -1,5 +1,6 @@
 import type { BossPuzzle, BossPuzzleResult } from './BossPuzzle';
 import { CONFIG } from './config';
+import { drawSpriteCentered } from './assets/draw';
 
 const W = CONFIG.canvas.width;
 const H = CONFIG.canvas.height;
@@ -584,6 +585,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
   }
 
   private drawGrass(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    if (drawSpriteCentered(ctx, 'veg_16', 0, cx, cy, 40)) return;
     ctx.fillStyle = '#3a6b35';
     ctx.fillRect(cx - 80, cy - 50, 160, 100);
     ctx.fillStyle = '#4a8b45';
@@ -602,6 +604,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
   }
 
   private drawBillSilhouette(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    if (drawSpriteCentered(ctx, 'cowboy_idle', 0, cx, cy - 10, 36)) return;
     ctx.fillStyle = '#111';
     ctx.beginPath();
     ctx.ellipse(cx, cy - 30, 8, 12, 0, 0, Math.PI * 2);
@@ -613,7 +616,14 @@ export class BillRustlerPuzzle implements BossPuzzle {
   }
 
   private drawWreckedBarn(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
-    ctx.fillStyle = '#3a2a1a';
+    if (drawSpriteCentered(ctx, 'bones', 0, cx, cy, 60)) {
+      const t = this.timer;
+      ctx.fillStyle = `rgba(255, 120, 20, ${0.3 + Math.sin(t * 3) * 0.2})`;
+      ctx.beginPath();
+      ctx.arc(cx - 30, cy + 15, 8, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
     ctx.fillRect(cx - 60, cy - 10, 120, 50);
     ctx.fillStyle = '#5a3a21';
     ctx.beginPath();
@@ -715,6 +725,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
   }
 
   private drawRanchHouse(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    if (drawSpriteCentered(ctx, 'house_1', 0, cx, cy, 100)) return;
     ctx.fillStyle = '#5c3a21';
     ctx.fillRect(cx - 50, cy - 15, 100, 55);
     ctx.fillStyle = '#8b6914';
@@ -738,6 +749,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
   }
 
   private drawOuthouse(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    if (drawSpriteCentered(ctx, 'house_2', 0, cx, cy, 50)) return;
     ctx.fillStyle = '#5c3a21';
     ctx.fillRect(cx - 20, cy - 10, 40, 40);
     ctx.fillStyle = '#8b6914';
@@ -755,6 +767,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
   }
 
   private drawCowIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    if (drawSpriteCentered(ctx, 'veg_16', 2, cx, cy, 40)) return;
     ctx.fillStyle = '#8b6914';
     ctx.beginPath();
     ctx.ellipse(cx, cy + 5, 25, 18, 0, 0, Math.PI * 2);
@@ -791,6 +804,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
   }
 
   private drawShedIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    if (drawSpriteCentered(ctx, 'house_3', 0, cx, cy, 70)) return;
     ctx.fillStyle = '#5c3a21';
     ctx.fillRect(cx - 30, cy - 15, 60, 50);
     ctx.fillStyle = '#8b5a2b';
@@ -826,6 +840,11 @@ export class BillRustlerPuzzle implements BossPuzzle {
       ctx.strokeStyle = enabled ? '#8b6914' : '#555';
       ctx.lineWidth = 2;
       ctx.strokeRect(a.x, a.y, a.w, a.h);
+
+      const iconKey = a.id === 'dynamite' ? 'terry_dynamite' : a.id === 'revolver' ? 'terry_revolver' : a.id === 'lasso' ? 'terry_belt' : null;
+      if (iconKey && enabled) {
+        drawSpriteCentered(ctx, iconKey, 0, a.x + 30, a.y + a.h / 2, 28);
+      }
 
       ctx.fillStyle = enabled ? '#ffd700' : '#666';
       const label = isLasso ? `Lasso (${this.lassosAvailable})` : a.label;

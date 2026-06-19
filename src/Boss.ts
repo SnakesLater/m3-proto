@@ -1,6 +1,7 @@
 import { CONFIG } from './config';
 import { PatternManager } from './BossPatterns';
 import type { BossPuzzle } from './BossPuzzle';
+import { drawSpriteCentered } from './assets/draw';
 
 export enum BossState {
   Intro,
@@ -250,10 +251,12 @@ export class BossFight {
   }
 
   drawOverlay(ctx: CanvasRenderingContext2D): void {
+    drawSpriteCentered(ctx, 'oga_cowboy', 0, W / 2, Math.floor(H * 0.03) + 16, 40);
+
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 24px Courier New';
     ctx.textAlign = 'center';
-    ctx.fillText(`BOSS: ${this.bossName}`, W / 2, Math.floor(H * 0.03) + 16);
+    ctx.fillText(`BOSS: ${this.bossName}`, W / 2, Math.floor(H * 0.03) + 48);
 
     if (this.state !== BossState.PuzzleIntro &&
         this.state !== BossState.PuzzleActive &&

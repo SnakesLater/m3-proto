@@ -1,5 +1,7 @@
 import { CONFIG } from './config';
 import { Silhouette, SilhouetteState } from './Silhouette';
+import { getSheet } from './assets/loader';
+import { drawSpriteCentered } from './assets/draw';
 
 export enum ShootoutPhase {
   Intro,
@@ -221,7 +223,8 @@ export class Shootout {
     }
 
     ctx.fillStyle = '#3a2510';
-    for (const pos of coverPositions(W, H)) {
+    const positions = coverPositions(W, H);
+    for (const pos of positions) {
       const isDoor = pos.y > H * 0.4;
       const w = Math.floor(W * 0.12);
       const h = isDoor ? Math.floor(H * 0.12) : Math.floor(H * 0.1);
@@ -230,6 +233,15 @@ export class Shootout {
       ctx.strokeStyle = '#5a3a1a';
       ctx.lineWidth = 2;
       ctx.strokeRect(pos.x - w / 2 - 3, pos.y - h / 2 - 3, w + 6, h + 6);
+
+      const spriteIdx = (pos.x + pos.y) % 3;
+      if (spriteIdx === 0) {
+        drawSpriteCentered(ctx, 'wanted_poster', 0, pos.x, pos.y - h * 0.15, 16);
+      } else if (spriteIdx === 1) {
+        drawSpriteCentered(ctx, 'bottle_prop', 0, pos.x + w * 0.3, pos.y - h * 0.1, 12);
+      } else {
+        drawSpriteCentered(ctx, 'tincan', 0, pos.x - w * 0.3, pos.y - h * 0.1, 12);
+      }
     }
 
     ctx.fillStyle = '#1a0f0a';
@@ -237,6 +249,8 @@ export class Shootout {
     ctx.fillRect(0, H - 8, W, 8);
     ctx.fillRect(0, 0, 8, H);
     ctx.fillRect(W - 8, 0, 8, H);
+
+    drawSpriteCentered(ctx, 'terry_wanted', 0, W / 2, 20, 24);
   }
 
   private drawIntro(ctx: CanvasRenderingContext2D): void {
@@ -272,19 +286,22 @@ export class Shootout {
     const W = CONFIG.canvas.width;
     const H = CONFIG.canvas.height;
 
+    drawSpriteCentered(ctx, 'terry_revolver', 0, 30, 30, 28);
+
     ctx.textAlign = 'left';
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 24px Courier New';
-    ctx.fillText(`WAVE ${this.currentWave + 1}/${this.totalWaves}`, 10, 30);
+
+    ctx.fillText(`WAVE ${this.currentWave + 1}/${this.totalWaves}`, 60, 34);
 
     ctx.textAlign = 'right';
     ctx.fillStyle = '#ff4444';
-    ctx.fillText(`HITS: ${this.hostilesHit}`, W - 10, 30);
+    ctx.fillText(`HITS: ${this.hostilesHit}`, W - 10, 34);
 
     if (this.friendliesHit > 0) {
       ctx.fillStyle = '#ff4444';
       ctx.font = '20px Courier New';
-      ctx.fillText(`FRIENDLY FIRE: ${this.friendliesHit}`, W - 10, 56);
+      ctx.fillText(`FRIENDLY FIRE: ${this.friendliesHit}`, W - 10, 58);
     }
 
     if (this.phase === ShootoutPhase.BetweenWaves) {

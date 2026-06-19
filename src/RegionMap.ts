@@ -1,5 +1,6 @@
 import { CONFIG } from './config';
 import type { RegionDef } from './data';
+import { drawSpriteCentered } from './assets/draw';
 
 const W = CONFIG.canvas.width;
 const H = CONFIG.canvas.height;
@@ -162,32 +163,36 @@ export class RegionMap {
     ctx.globalAlpha = a;
 
     if (type === 'town') {
-      ctx.fillStyle = '#8b5a2b';
-      ctx.fillRect(x - 10, y - 10, 20, 20);
-      ctx.fillStyle = '#5c3a21';
-      ctx.fillRect(x - 6, y - 4, 12, 14);
-      ctx.fillStyle = '#a0724a';
-      ctx.fillRect(x - 8, y - 12, 16, 4);
-      ctx.fillStyle = '#3a1a0a';
-      ctx.fillRect(x - 3, y + 2, 6, 8);
+      if (!drawSpriteCentered(ctx, 'house_2', 0, x, y, 20)) {
+        ctx.fillStyle = '#8b5a2b';
+        ctx.fillRect(x - 10, y - 10, 20, 20);
+        ctx.fillStyle = '#5c3a21';
+        ctx.fillRect(x - 6, y - 4, 12, 14);
+        ctx.fillStyle = '#a0724a';
+        ctx.fillRect(x - 8, y - 12, 16, 4);
+        ctx.fillStyle = '#3a1a0a';
+        ctx.fillRect(x - 3, y + 2, 6, 8);
+      }
     } else {
-      ctx.fillStyle = '#5c3a21';
-      ctx.beginPath();
-      ctx.moveTo(x - 12, y + 6);
-      ctx.lineTo(x, y - 12);
-      ctx.lineTo(x + 12, y + 6);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#8b5a2b';
-      ctx.fillRect(x - 1, y - 6, 2, 12);
-      ctx.fillStyle = '#cc6600';
-      ctx.beginPath();
-      ctx.arc(x, y + 10, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ff8c00';
-      ctx.beginPath();
-      ctx.arc(x, y + 10, 2, 0, Math.PI * 2);
-      ctx.fill();
+      if (!drawSpriteCentered(ctx, 'veg_16', 3, x, y, 20)) {
+        ctx.fillStyle = '#5c3a21';
+        ctx.beginPath();
+        ctx.moveTo(x - 12, y + 6);
+        ctx.lineTo(x, y - 12);
+        ctx.lineTo(x + 12, y + 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#8b5a2b';
+        ctx.fillRect(x - 1, y - 6, 2, 12);
+        ctx.fillStyle = '#cc6600';
+        ctx.beginPath();
+        ctx.arc(x, y + 10, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ff8c00';
+        ctx.beginPath();
+        ctx.arc(x, y + 10, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     ctx.restore();

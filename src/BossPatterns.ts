@@ -1,4 +1,5 @@
 import { CONFIG } from './config';
+import { drawSpriteCentered } from './assets/draw';
 
 const W = CONFIG.canvas.width;
 const H = CONFIG.canvas.height;
@@ -308,10 +309,12 @@ class DynamiteTossPattern implements PatternState {
         );
         ctx.rotate(angle);
 
-        ctx.fillStyle = '#8b4513';
-        ctx.fillRect(-12, -5, 24, 10);
-        ctx.fillStyle = '#a0522d';
-        ctx.fillRect(-10, -4, 20, 8);
+        if (!drawSpriteCentered(ctx, 'terry_dynamite', 0, 0, 0, 30)) {
+          ctx.fillStyle = '#8b4513';
+          ctx.fillRect(-12, -5, 24, 10);
+          ctx.fillStyle = '#a0522d';
+          ctx.fillRect(-10, -4, 20, 8);
+        }
 
         // Fuse
         ctx.strokeStyle = '#888';

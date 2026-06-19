@@ -1,5 +1,6 @@
 import { CONFIG } from './config';
 import type { TownDef } from './data';
+import { drawSpriteCentered } from './assets/draw';
 
 const W = CONFIG.canvas.width;
 const H = CONFIG.canvas.height;
@@ -8,6 +9,8 @@ export class TownSelect {
   draw(ctx: CanvasRenderingContext2D, town: TownDef): void {
     ctx.fillStyle = '#1a0a05';
     ctx.fillRect(0, 0, W, H);
+
+    drawSpriteCentered(ctx, 'terry_wanted', 1, W / 2, H * 0.06, 32);
 
     ctx.textAlign = 'center';
 
@@ -59,6 +62,8 @@ export class TownSelect {
     ctx.fillStyle = CONFIG.colors.hudGold;
     ctx.font = 'bold 22px Courier New';
     ctx.fillText('RIDE OUT', W / 2, btnY + 33);
+
+    drawSpriteCentered(ctx, 'terry_revolver', 0, W / 2 - 130, btnY + 25, 24);
 
     ctx.globalAlpha = 1;
   }

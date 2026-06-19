@@ -1,9 +1,23 @@
 import { CONFIG } from './config';
+import { drawSpriteCentered } from './assets/draw';
 
 export interface PieceTypeDef {
   name: string;
   color: string;
   draw: (ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) => void;
+  spriteKey?: string;
+}
+
+function spriteOrProc(
+  key: string,
+  frameIdx: number,
+  proc: (ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number) => void,
+): (ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number) => void {
+  return (ctx, cx, cy, s) => {
+    if (!drawSpriteCentered(ctx, key, frameIdx, cx, cy, s)) {
+      proc(ctx, cx, cy, s);
+    }
+  };
 }
 
 function drawOutlaw(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number): void {
@@ -231,11 +245,11 @@ function drawLasso(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: num
 }
 
 export const PIECE_TYPES: PieceTypeDef[] = [
-  { name: 'Outlaw', color: '#ff3333', draw: drawOutlaw },
-  { name: 'Bandit', color: '#1a1a1a', draw: drawBandit },
-  { name: 'Snake', color: '#33cc33', draw: drawSnake },
-  { name: 'Coyote', color: '#cccccc', draw: drawCoyote },
-  { name: 'Vulture', color: '#cc6600', draw: drawVulture },
+  { name: 'Outlaw', color: '#ff3333', draw: spriteOrProc('piece_hat', 0, drawOutlaw) },
+  { name: 'Bandit', color: '#1a1a1a', draw: spriteOrProc('piece_boot', 0, drawBandit) },
+  { name: 'Snake', color: '#33cc33', draw: spriteOrProc('piece_bottle', 0, drawSnake) },
+  { name: 'Coyote', color: '#cccccc', draw: spriteOrProc('piece_gold', 0, drawCoyote) },
+  { name: 'Vulture', color: '#cc6600', draw: spriteOrProc('piece_star', 0, drawVulture) },
   { name: 'Cow', color: '#8b6914', draw: drawCow },
   { name: 'Heart', color: '#ff0044', draw: drawHeart },
   { name: 'Lasso', color: '#c49a6c', draw: drawLasso },

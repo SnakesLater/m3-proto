@@ -1,5 +1,7 @@
 import { CONFIG } from './config';
 import { Game } from './Game';
+import { loadAssets } from './assets/loader';
+import { ALL_ASSETS } from './assets/manifest';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -7,10 +9,30 @@ const ctx = canvas.getContext('2d')!;
 const W = CONFIG.canvas.width;
 const H = CONFIG.canvas.height;
 
-const game = new Game();
-(window as any).__game = game;
-
+let game: Game;
 let lastTime = performance.now();
+let assetsLoaded = false;
+
+async function init(): Promise<void> {
+  if (canvas.dataset.assetLoad !== 'done') {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = '20px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('LOADING...', W / 2, H / 2);
+  }
+
+  loadAssets(ALL_ASSETS).then(() => {
+    canvas.dataset.assetLoad = 'done';
+    assetsLoaded = true;
+  });
+
+  game = new Game();
+  (window as any).__game = game;
+
+  requestAnimationFrame(loop);
+}
 
 function loop(now: number): void {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
@@ -63,4 +85,4 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
   game.handleKeyDown(e.key, e.shiftKey);
 });
 
-requestAnimationFrame(loop);
+init();

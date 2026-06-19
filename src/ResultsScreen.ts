@@ -1,5 +1,6 @@
 import { CONFIG } from './config';
 import type { LevelResult } from './data';
+import { drawSpriteCentered } from './assets/draw';
 
 const W = CONFIG.canvas.width;
 const H = CONFIG.canvas.height;
@@ -89,6 +90,12 @@ export class ResultsScreen {
     ctx.fillStyle = CONFIG.colors.hudGold;
     ctx.font = 'bold 26px Courier New';
     ctx.fillText('CONTINUE', W / 2, btnY + 37);
+
+    drawSpriteCentered(ctx, 'terry_revolver', 0, W / 2 - 145, btnY + 28, 24);
+
+    if (result.passed) {
+      drawSpriteCentered(ctx, 'piece_gold', 0, W / 2, H * 0.05, 32);
+    }
   }
 
   handleClick(mx: number, my: number): boolean {
