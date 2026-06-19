@@ -100,7 +100,7 @@ class FanFirePattern implements PatternState {
         ctx.lineWidth = 6;
         for (const lane of this.lanes) {
           ctx.beginPath();
-          ctx.moveTo(W / 2, 100);
+          ctx.moveTo(W / 2, Math.floor(H * 0.12));
           ctx.lineTo(lane.x, lane.y);
           ctx.stroke();
         }
@@ -206,12 +206,12 @@ class DynamiteTossPattern implements PatternState {
     this.timer = 0;
     this.arcProgress = 0;
     this.hit = false;
-    this.startX = 80 + Math.random() * 60;
-    this.startY = 300 + Math.random() * 80;
-    this.endX = W - 80 - Math.random() * 60;
-    this.endY = 300 + Math.random() * 80;
+    this.startX = Math.floor(W * 0.12) + Math.random() * Math.floor(W * 0.1);
+    this.startY = Math.floor(H * 0.35) + Math.random() * Math.floor(H * 0.08);
+    this.endX = W - Math.floor(W * 0.12) - Math.random() * Math.floor(W * 0.1);
+    this.endY = Math.floor(H * 0.35) + Math.random() * Math.floor(H * 0.08);
     this.peakX = W / 2;
-    this.peakY = 100 + Math.random() * 80;
+    this.peakY = Math.floor(H * 0.14) + Math.random() * Math.floor(H * 0.08);
   }
 
   get name(): string { return 'Dynamite Toss'; }
@@ -484,7 +484,7 @@ class QuickDrawPattern implements PatternState {
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 60px Courier New';
         ctx.textAlign = 'center';
-        ctx.fillText('DRAW!', W / 2, 120);
+          ctx.fillText('DRAW!', W / 2, Math.floor(H * 0.14));
 
         if (this.hit) {
           ctx.fillStyle = 'rgba(255, 255, 200, 0.5)';
@@ -599,15 +599,15 @@ class ReloadWindowPattern implements PatternState {
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 36px Courier New';
         ctx.textAlign = 'center';
-        ctx.fillText('RELOADING!', W / 2, 120);
+        ctx.fillText('RELOADING!', W / 2, Math.floor(H * 0.14));
 
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 24px Courier New';
-        ctx.fillText(`Shots: ${this.clicks}`, W / 2, 180);
+        ctx.fillText(`Shots: ${this.clicks}`, W / 2, Math.floor(H * 0.2));
 
         // Progress bar
         const bx = W / 2 - 120;
-        const by = 210;
+        const by = Math.floor(H * 0.24);
         const bw = 240;
         const bh = 16;
         ctx.fillStyle = '#3a1a1a';
@@ -627,7 +627,7 @@ class ReloadWindowPattern implements PatternState {
         ctx.globalAlpha = pulse;
         ctx.fillStyle = '#ff8c00';
         ctx.font = 'bold 48px Courier New';
-        ctx.fillText('CLICK!', W / 2, H / 2 + 60);
+        ctx.fillText('CLICK!', W / 2, Math.floor(H * 0.56));
         ctx.globalAlpha = 1;
 
         break;

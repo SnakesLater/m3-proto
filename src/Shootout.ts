@@ -17,15 +17,18 @@ export interface ShootoutResult {
   gripDelta: number;
 }
 
-const COVER_POSITIONS = [
-  { x: 140, y: 230 },
-  { x: 300, y: 230 },
-  { x: 460, y: 230 },
-  { x: 620, y: 230 },
-  { x: 780, y: 230 },
-  { x: 220, y: 350 },
-  { x: 740, y: 350 },
-];
+function coverPositions(W: number, H: number): { x: number; y: number }[] {
+  return [
+    { x: Math.floor(W * 0.17), y: Math.floor(H * 0.3) },
+    { x: Math.floor(W * 0.5), y: Math.floor(H * 0.28) },
+    { x: Math.floor(W * 0.83), y: Math.floor(H * 0.3) },
+    { x: Math.floor(W * 0.17), y: Math.floor(H * 0.48) },
+    { x: Math.floor(W * 0.5), y: Math.floor(H * 0.44) },
+    { x: Math.floor(W * 0.83), y: Math.floor(H * 0.48) },
+    { x: Math.floor(W * 0.33), y: Math.floor(H * 0.38) },
+    { x: Math.floor(W * 0.67), y: Math.floor(H * 0.38) },
+  ];
+}
 
 interface SpawnItem {
   sil: Silhouette;
@@ -75,10 +78,12 @@ export class Shootout {
   }
 
   private spawnWave(): void {
+    const W = CONFIG.canvas.width;
+    const H = CONFIG.canvas.height;
     const config = CONFIG.shootout;
     const count = config.hostilesPerWave + config.friendliesPerWave;
 
-    const available = [...COVER_POSITIONS];
+    const available = [...coverPositions(W, H)];
     const used: typeof available = [];
 
     for (let i = 0; i < count; i++) {
@@ -208,18 +213,18 @@ export class Shootout {
     ctx.fillRect(0, 0, W, H);
 
     ctx.fillStyle = '#1a0a05';
-    ctx.fillRect(0, 120, W, H - 120);
+    ctx.fillRect(0, Math.floor(H * 0.14), W, H - Math.floor(H * 0.14));
 
     ctx.fillStyle = '#2a1a10';
-    for (let y = 130; y < H; y += 40) {
-      ctx.fillRect(40, y, W - 80, 2);
+    for (let y = Math.floor(H * 0.15); y < H; y += Math.floor(H * 0.045)) {
+      ctx.fillRect(Math.floor(W * 0.07), y, Math.floor(W * 0.86), 2);
     }
 
     ctx.fillStyle = '#3a2510';
-    for (const pos of COVER_POSITIONS) {
-      const isDoor = pos.y > 300;
-      const w = isDoor ? 70 : 60;
-      const h = isDoor ? 100 : 80;
+    for (const pos of coverPositions(W, H)) {
+      const isDoor = pos.y > H * 0.4;
+      const w = Math.floor(W * 0.12);
+      const h = isDoor ? Math.floor(H * 0.12) : Math.floor(H * 0.1);
       ctx.fillRect(pos.x - w / 2, pos.y - h / 2, w, h);
 
       ctx.strokeStyle = '#5a3a1a';
@@ -240,19 +245,19 @@ export class Shootout {
 
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ff8c00';
-    ctx.font = 'bold 48px Courier New';
-    ctx.fillText('DEADEYE', W / 2, H / 2 - 30);
+    ctx.font = 'bold 56px Courier New';
+    ctx.fillText('DEADEYE', W / 2, H * 0.35);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '24px Courier New';
+    ctx.font = '28px Courier New';
     const pulse = 0.5 + Math.sin(this.timer * 6) * 0.5;
     ctx.globalAlpha = pulse;
-    ctx.fillText('CLICK TO SHOOT', W / 2, H / 2 + 30);
+    ctx.fillText('CLICK TO SHOOT', W / 2, H * 0.45);
     ctx.globalAlpha = 1;
 
     ctx.fillStyle = '#aaaaaa';
-    ctx.font = '18px Courier New';
-    ctx.fillText(`Wave ${this.currentWave + 1} of ${this.totalWaves}`, W / 2, H / 2 + 80);
+    ctx.font = '22px Courier New';
+    ctx.fillText(`Wave ${this.currentWave + 1} of ${this.totalWaves}`, W / 2, H * 0.52);
   }
 
   private drawSilhouettes(ctx: CanvasRenderingContext2D): void {
@@ -265,27 +270,28 @@ export class Shootout {
 
   private drawHUD(ctx: CanvasRenderingContext2D): void {
     const W = CONFIG.canvas.width;
+    const H = CONFIG.canvas.height;
 
     ctx.textAlign = 'left';
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 20px Courier New';
-    ctx.fillText(`WAVE ${this.currentWave + 1}/${this.totalWaves}`, 20, 35);
+    ctx.font = 'bold 24px Courier New';
+    ctx.fillText(`WAVE ${this.currentWave + 1}/${this.totalWaves}`, 10, 30);
 
     ctx.textAlign = 'right';
     ctx.fillStyle = '#ff4444';
-    ctx.fillText(`HITS: ${this.hostilesHit}`, W - 20, 35);
+    ctx.fillText(`HITS: ${this.hostilesHit}`, W - 10, 30);
 
     if (this.friendliesHit > 0) {
       ctx.fillStyle = '#ff4444';
-      ctx.font = '18px Courier New';
-      ctx.fillText(`FRIENDLY FIRE: ${this.friendliesHit}`, W - 20, 60);
+      ctx.font = '20px Courier New';
+      ctx.fillText(`FRIENDLY FIRE: ${this.friendliesHit}`, W - 10, 56);
     }
 
     if (this.phase === ShootoutPhase.BetweenWaves) {
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ffd700';
-      ctx.font = '28px Courier New';
-      ctx.fillText('RELOADING...', W / 2, CONFIG.canvas.height / 2 + 100);
+      ctx.font = '32px Courier New';
+      ctx.fillText('RELOADING...', W / 2, H * 0.6);
     }
   }
 
@@ -296,22 +302,22 @@ export class Shootout {
 
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 48px Courier New';
-    ctx.fillText('SHOOTOUT OVER', W / 2, H / 2 - 60);
+    ctx.font = 'bold 56px Courier New';
+    ctx.fillText('SHOOTOUT OVER', W / 2, H * 0.35);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '24px Courier New';
-    ctx.fillText(`Hostiles: ${result.hostilesHit}/${result.hostilesTotal}`, W / 2, H / 2);
+    ctx.font = '28px Courier New';
+    ctx.fillText(`Hostiles: ${result.hostilesHit}/${result.hostilesTotal}`, W / 2, H * 0.46);
 
     if (result.friendliesHit > 0) {
       ctx.fillStyle = '#ff4444';
-      ctx.fillText(`Friendlies hit: ${result.friendliesHit}`, W / 2, H / 2 + 35);
+      ctx.fillText(`Friendlies hit: ${result.friendliesHit}`, W / 2, H * 0.52);
     }
 
     const gripText = result.gripDelta >= 0 ? `Grip -${result.gripDelta}` : `Grip +${Math.abs(result.gripDelta)}`;
     ctx.fillStyle = result.gripDelta >= 0 ? '#4a4' : '#ff4444';
-    ctx.font = '28px Courier New';
-    ctx.fillText(gripText, W / 2, H / 2 + 75);
+    ctx.font = '32px Courier New';
+    ctx.fillText(gripText, W / 2, H * 0.6);
   }
 
   drawPrompt(ctx: CanvasRenderingContext2D): void {
@@ -324,33 +330,37 @@ export class Shootout {
     ctx.textAlign = 'center';
 
     ctx.fillStyle = '#ff8c00';
-    ctx.font = 'bold 48px Courier New';
-    ctx.fillText('DEADEYE READY', W / 2, H / 2 - 80);
+    ctx.font = 'bold 56px Courier New';
+    ctx.fillText('DEADEYE READY', W / 2, H * 0.3);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '22px Courier New';
-    ctx.fillText('Your aim is steady. Take the shot?', W / 2, H / 2 - 25);
+    ctx.font = '26px Courier New';
+    ctx.fillText('Your aim is steady. Take the shot?', W / 2, H * 0.38);
 
     const pulse = 0.5 + Math.sin(performance.now() / 300) * 0.5;
     ctx.globalAlpha = 0.7 + pulse * 0.3;
 
+    const btnW = Math.floor(W * 0.24);
+    const btnH = 56;
+    const btnY = Math.floor(H * 0.48);
+
     ctx.fillStyle = '#7a4a2b';
-    ctx.fillRect(W / 2 - 160, H / 2 + 30, 140, 50);
+    ctx.fillRect(W / 2 - btnW - 10, btnY, btnW, btnH);
     ctx.strokeStyle = '#ffd700';
     ctx.lineWidth = 2;
-    ctx.strokeRect(W / 2 - 160, H / 2 + 30, 140, 50);
+    ctx.strokeRect(W / 2 - btnW - 10, btnY, btnW, btnH);
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 22px Courier New';
-    ctx.fillText('SHOOT', W / 2 - 90, H / 2 + 62);
+    ctx.font = 'bold 26px Courier New';
+    ctx.fillText('SHOOT', W / 2 - btnW / 2 - 10, btnY + 37);
 
     ctx.fillStyle = '#3a2a1a';
-    ctx.fillRect(W / 2 + 20, H / 2 + 30, 140, 50);
+    ctx.fillRect(W / 2 + 10, btnY, btnW, btnH);
     ctx.strokeStyle = '#888';
     ctx.lineWidth = 2;
-    ctx.strokeRect(W / 2 + 20, H / 2 + 30, 140, 50);
+    ctx.strokeRect(W / 2 + 10, btnY, btnW, btnH);
     ctx.fillStyle = '#888';
-    ctx.font = 'bold 22px Courier New';
-    ctx.fillText('SKIP', W / 2 + 90, H / 2 + 62);
+    ctx.font = 'bold 26px Courier New';
+    ctx.fillText('SKIP', W / 2 + btnW / 2 + 10, btnY + 37);
 
     ctx.globalAlpha = 1;
   }
@@ -359,8 +369,12 @@ export class Shootout {
     const W = CONFIG.canvas.width;
     const H = CONFIG.canvas.height;
 
-    const shootBtn = { x: W / 2 - 160, y: H / 2 + 30, w: 140, h: 50 };
-    const skipBtn = { x: W / 2 + 20, y: H / 2 + 30, w: 140, h: 50 };
+    const btnW = Math.floor(W * 0.24);
+    const btnH = 56;
+    const btnY = Math.floor(H * 0.48);
+
+    const shootBtn = { x: W / 2 - btnW - 10, y: btnY, w: btnW, h: btnH };
+    const skipBtn = { x: W / 2 + 10, y: btnY, w: btnW, h: btnH };
 
     if (mx >= shootBtn.x && mx <= shootBtn.x + shootBtn.w && my >= shootBtn.y && my <= shootBtn.y + shootBtn.h) {
       return 'shoot';

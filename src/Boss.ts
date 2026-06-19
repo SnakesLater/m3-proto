@@ -253,7 +253,7 @@ export class BossFight {
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 24px Courier New';
     ctx.textAlign = 'center';
-    ctx.fillText(`BOSS: ${this.bossName}`, W / 2, 28);
+    ctx.fillText(`BOSS: ${this.bossName}`, W / 2, Math.floor(H * 0.03) + 16);
 
     if (this.state !== BossState.PuzzleIntro &&
         this.state !== BossState.PuzzleActive &&
@@ -277,7 +277,7 @@ export class BossFight {
         ctx.font = 'bold 22px Courier New';
         ctx.fillText(
           `Match hearts for bonus damage  |  Boss attacks in ${nextPattern} moves`,
-          W / 2, 85,
+          W / 2, Math.floor(H * 0.1),
         );
         break;
       }
@@ -288,7 +288,7 @@ export class BossFight {
           ctx.fillRect(0, 0, W, H);
           ctx.fillStyle = '#ff4444';
           ctx.font = 'bold 26px Courier New';
-          ctx.fillText(`⚠ ${this.patterns.activePattern.name} ⚠`, W / 2, 85);
+          ctx.fillText(`⚠ ${this.patterns.activePattern.name} ⚠`, W / 2, Math.floor(H * 0.1));
           this.patterns.draw(ctx);
         }
         break;
@@ -298,8 +298,8 @@ export class BossFight {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
         ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 24px Courier New';
-        ctx.fillText('DEADEYE — Puzzle Mode', W / 2, 120);
+        ctx.font = 'bold 28px Courier New';
+        ctx.fillText('DEADEYE — Puzzle Mode', W / 2, Math.floor(H * 0.14));
         break;
       }
 
@@ -321,9 +321,9 @@ export class BossFight {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = '#aaa';
-        ctx.font = '20px Courier New';
+        ctx.font = '24px Courier New';
         ctx.textAlign = 'center';
-        ctx.fillText('Returning to the fight...', W / 2, 120);
+        ctx.fillText('Returning to the fight...', W / 2, Math.floor(H * 0.14));
         break;
       }
 
@@ -335,7 +335,7 @@ export class BossFight {
 
   private drawHealthBar(ctx: CanvasRenderingContext2D): void {
     const bx = W / 2 - 150;
-    const by = 55;
+    const by = Math.floor(H * 0.06) + 14;
     const bw = 300;
     const bh = 18;
 
@@ -363,16 +363,16 @@ export class BossFight {
     ctx.fillRect(0, 0, W, H);
 
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 48px Courier New';
+    ctx.font = 'bold 56px Courier New';
     ctx.textAlign = 'center';
-    ctx.fillText('BOSS DEFEATED!', W / 2, H / 2 - 40);
+    ctx.fillText('BOSS DEFEATED!', W / 2, H * 0.38);
 
     ctx.fillStyle = '#4a4';
-    ctx.font = '24px Courier New';
-    ctx.fillText(`${this.bossName} has been vanquished`, W / 2, H / 2 + 20);
+    ctx.font = '28px Courier New';
+    ctx.fillText(`${this.bossName} has been vanquished`, W / 2, H * 0.48);
 
     ctx.fillStyle = '#fff';
-    ctx.font = '20px Courier New';
-    ctx.fillText('The region is liberated!', W / 2, H / 2 + 60);
+    ctx.font = '24px Courier New';
+    ctx.fillText('The region is liberated!', W / 2, H * 0.55);
   }
 }

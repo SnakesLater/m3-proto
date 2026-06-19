@@ -402,6 +402,33 @@ export class Game {
     }
   }
 
+  handlePointerDown(mx: number, my: number): void {
+    switch (this.state) {
+      case GameState.Playing:
+      case GameState.BossActive:
+        this.board.onPointerDown(mx, my);
+        break;
+    }
+  }
+
+  handlePointerMove(mx: number, my: number): void {
+    switch (this.state) {
+      case GameState.Playing:
+      case GameState.BossActive:
+        this.board.onPointerMove(mx, my, this.effects);
+        break;
+    }
+  }
+
+  handlePointerUp(mx: number, my: number): void {
+    switch (this.state) {
+      case GameState.Playing:
+      case GameState.BossActive:
+        this.board.onPointerUp(mx, my, this.effects);
+        break;
+    }
+  }
+
   handleMouseMove(mx: number, my: number): void {
     switch (this.state) {
       case GameState.Playing:

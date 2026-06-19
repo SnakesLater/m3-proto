@@ -36,18 +36,19 @@ export class ResultsScreen {
 
     ctx.textAlign = 'center';
 
+    const titleY = Math.floor(H * 0.1);
     if (result.passed) {
       ctx.fillStyle = '#4a4';
-      ctx.font = 'bold 48px Courier New';
-      ctx.fillText('CLEAR!', W / 2, 100);
+      ctx.font = 'bold 56px Courier New';
+      ctx.fillText('CLEAR!', W / 2, titleY);
     } else {
       ctx.fillStyle = '#cc3333';
-      ctx.font = 'bold 48px Courier New';
-      ctx.fillText('OUT OF MOVES', W / 2, 100);
+      ctx.font = 'bold 56px Courier New';
+      ctx.fillText('OUT OF MOVES', W / 2, titleY);
     }
 
     ctx.fillStyle = CONFIG.colors.hudWhite;
-    ctx.font = '20px Courier New';
+    ctx.font = '24px Courier New';
 
     const showScore = this.displayScore;
     const lines: string[] = [
@@ -71,29 +72,30 @@ export class ResultsScreen {
       lines.push(`Friendly fire: ${result.shootoutFriendlies}`);
     }
 
+    const linesStartY = Math.floor(H * 0.2);
     lines.forEach((line, i) => {
       ctx.fillStyle = CONFIG.colors.hudWhite;
-      ctx.fillText(line, W / 2, 200 + i * 35);
+      ctx.fillText(line, W / 2, linesStartY + i * 40);
     });
 
-    const btnY = 420;
+    const btnY = Math.floor(H * 0.44);
     ctx.fillStyle = '#5c3a21';
-    ctx.fillRect(W / 2 - 120, btnY, 240, 50);
+    ctx.fillRect(W / 2 - 130, btnY, 260, 56);
 
     ctx.strokeStyle = CONFIG.colors.hudGold;
     ctx.lineWidth = 2;
-    ctx.strokeRect(W / 2 - 120, btnY, 240, 50);
+    ctx.strokeRect(W / 2 - 130, btnY, 260, 56);
 
     ctx.fillStyle = CONFIG.colors.hudGold;
-    ctx.font = 'bold 22px Courier New';
-    ctx.fillText('CONTINUE', W / 2, btnY + 33);
+    ctx.font = 'bold 26px Courier New';
+    ctx.fillText('CONTINUE', W / 2, btnY + 37);
   }
 
   handleClick(mx: number, my: number): boolean {
-    const btnY = 420;
+    const btnY = Math.floor(H * 0.44);
     return (
-      mx >= W / 2 - 120 && mx <= W / 2 + 120 &&
-      my >= btnY && my <= btnY + 50
+      mx >= W / 2 - 130 && mx <= W / 2 + 130 &&
+      my >= btnY && my <= btnY + 56
     );
   }
 }

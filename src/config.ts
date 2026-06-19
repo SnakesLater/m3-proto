@@ -1,10 +1,10 @@
 export const CONFIG = {
-  canvas: { width: 960, height: 600 },
+  canvas: { width: 600, height: 960 },
 
   board: {
     cols: 7,
     rows: 6,
-    cellSize: 64,
+    cellSize: 80,
     offsetY: 120,
     border: 8,
   },

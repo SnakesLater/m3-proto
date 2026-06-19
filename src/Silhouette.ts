@@ -18,7 +18,13 @@ export class Silhouette {
   stateTimer = 0;
   hitByPlayer = false;
 
-  readonly hitboxRadius = 28;
+  get scale(): number {
+    return CONFIG.canvas.height / 600;
+  }
+
+  get hitboxRadius(): number {
+    return Math.floor(28 * this.scale);
+  }
 
   constructor(x: number, y: number, isHostile: boolean) {
     this.x = x;
@@ -124,7 +130,8 @@ export class Silhouette {
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.translate(this.x, this.y + 10);
+    ctx.scale(this.scale, this.scale);
+    ctx.translate(this.x / this.scale, (this.y + 10) / this.scale);
 
     if (scale !== 1) {
       ctx.scale(1, scale);
@@ -203,7 +210,8 @@ export class Silhouette {
   private drawTelegraph(ctx: CanvasRenderingContext2D): void {
     const t = this.stateTimer / CONFIG.shootout.telegraphDuration;
     ctx.save();
-    ctx.translate(this.x, this.y + 10);
+    ctx.scale(this.scale, this.scale);
+    ctx.translate(this.x / this.scale, (this.y + 10) / this.scale);
 
     ctx.globalAlpha = t * 0.5;
     ctx.fillStyle = '#ffd700';

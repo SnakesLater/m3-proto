@@ -55,18 +55,30 @@ export class BillRustlerPuzzle implements BossPuzzle {
 
   lassosAvailable = 0;
 
-  private readonly positions: PositionDef[] = [
-    { x: 60, y: 200, w: 220, h: 200 },
-    { x: 370, y: 200, w: 220, h: 200 },
-    { x: 680, y: 200, w: 220, h: 200 },
-  ];
+  private readonly positions: PositionDef[] = (() => {
+    const slotW = Math.floor(W * 0.28);
+    const slotH = Math.floor(H * 0.2);
+    const slotY = Math.floor(H * 0.2);
+    const gap = Math.floor((W - slotW * 3) / 4);
+    return [
+      { x: gap, y: slotY, w: slotW, h: slotH },
+      { x: gap * 2 + slotW, y: slotY, w: slotW, h: slotH },
+      { x: gap * 3 + slotW * 2, y: slotY, w: slotW, h: slotH },
+    ];
+  })();
 
-  private readonly actions: ActionDef[] = [
-    { id: 'dynamite', label: 'Dynamite', x: 280, y: 460, w: 200, h: 45 },
-    { id: 'revolver', label: 'Revolver', x: 480, y: 460, w: 200, h: 45 },
-    { id: 'lasso', label: 'Lasso', x: 280, y: 515, w: 200, h: 45 },
-    { id: 'hold', label: 'Hold', x: 480, y: 515, w: 200, h: 45 },
-  ];
+  private readonly actions: ActionDef[] = (() => {
+    const btnW = Math.floor(W * 0.35);
+    const btnH = 50;
+    const actionY = Math.floor(H * 0.55);
+    const half = Math.floor((W - btnW * 2) / 3);
+    return [
+      { id: 'dynamite', label: 'Dynamite', x: half, y: actionY, w: btnW, h: btnH },
+      { id: 'revolver', label: 'Revolver', x: half * 2 + btnW, y: actionY, w: btnW, h: btnH },
+      { id: 'lasso', label: 'Lasso', x: half, y: actionY + 60, w: btnW, h: btnH },
+      { id: 'hold', label: 'Hold', x: half * 2 + btnW, y: actionY + 60, w: btnW, h: btnH },
+    ];
+  })();
 
   posTypes: (SlotType | null)[] = [null, null, null];
   billPosition = -1;
@@ -398,9 +410,9 @@ export class BillRustlerPuzzle implements BossPuzzle {
     ctx.fillRect(0, 0, W, H);
 
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 20px Courier New';
+    ctx.font = 'bold 24px Courier New';
     ctx.textAlign = 'center';
-    ctx.fillText('DEADEYE — Bill the Rustler', W / 2, 40);
+    ctx.fillText('DEADEYE — Bill the Rustler', W / 2, Math.floor(H * 0.06));
 
     this.drawSlots(ctx);
 
@@ -418,9 +430,10 @@ export class BillRustlerPuzzle implements BossPuzzle {
 
   private drawPrompt(ctx: CanvasRenderingContext2D): void {
     ctx.fillStyle = '#fff';
-    ctx.font = '16px Courier New';
+    ctx.font = '18px Courier New';
     ctx.textAlign = 'center';
 
+    const promptY = Math.floor(H * 0.47);
     if (this.selectedSlot >= 0) {
       const type = this.posTypes[this.selectedSlot];
       const destroyed = this.posDestroyed[this.selectedSlot];
@@ -431,9 +444,9 @@ export class BillRustlerPuzzle implements BossPuzzle {
         type === 'ranch_house' ? 'the ranch house' :
         'the outhouse'
       );
-      ctx.fillText(`Targeting ${name} — pick your weapon:`, W / 2, 435);
+      ctx.fillText(`Targeting ${name} — pick your weapon:`, W / 2, promptY);
     } else {
-      ctx.fillText('Click a spot to target, or Hold to pass:', W / 2, 435);
+      ctx.fillText('Click a spot to target, or Hold to pass:', W / 2, promptY);
     }
   }
 
@@ -482,8 +495,8 @@ export class BillRustlerPuzzle implements BossPuzzle {
         ctx.fillStyle = `rgba(255, 0, 0, ${pulse * 0.3})`;
         ctx.fillRect(pos.x, pos.y, pos.w, pos.h);
         ctx.fillStyle = '#ff4444';
-        ctx.font = 'bold 16px Courier New';
-        ctx.fillText('??? MOVEMENT ???', pos.x + pos.w / 2, pos.y + 170);
+        ctx.font = 'bold 18px Courier New';
+        ctx.fillText('??? MOVEMENT ???', pos.x + pos.w / 2, pos.y + pos.h - 30);
       }
     }
   }
@@ -792,7 +805,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
   }
 
   private drawActions(ctx: CanvasRenderingContext2D): void {
-    ctx.font = 'bold 16px Courier New';
+    ctx.font = 'bold 20px Courier New';
     ctx.textAlign = 'center';
 
     for (const a of this.actions) {
@@ -816,7 +829,7 @@ export class BillRustlerPuzzle implements BossPuzzle {
 
       ctx.fillStyle = enabled ? '#ffd700' : '#666';
       const label = isLasso ? `Lasso (${this.lassosAvailable})` : a.label;
-      ctx.fillText(label, a.x + a.w / 2, a.y + 28);
+      ctx.fillText(label, a.x + a.w / 2, a.y + 32);
     }
   }
 
@@ -825,37 +838,42 @@ export class BillRustlerPuzzle implements BossPuzzle {
     ctx.fillRect(0, 0, W, H);
 
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 28px Courier New';
+    ctx.font = 'bold 32px Courier New';
     ctx.textAlign = 'center';
 
     const text = this._result.bossDamage > 0 ? 'HIT!' : (this._result.lassosUsed > 0 ? 'Lasso!' : 'MISS!');
-    ctx.fillText(text, W / 2, H / 2 - 80);
+    ctx.fillText(text, W / 2, H * 0.35);
 
     ctx.fillStyle = '#fff';
-    ctx.font = '18px Courier New';
-    ctx.fillText(this._result.narrativeLine, W / 2, H / 2 - 30);
+    ctx.font = '22px Courier New';
+    ctx.fillText(this._result.narrativeLine, W / 2, H * 0.42);
 
+    let ly = H * 0.5;
     if (this._result.bossDamage > 0) {
       ctx.fillStyle = '#4a4';
-      ctx.font = 'bold 20px Courier New';
-      ctx.fillText(`Boss Damage: ${this._result.bossDamage}`, W / 2, H / 2 + 30);
+      ctx.font = 'bold 22px Courier New';
+      ctx.fillText(`Boss Damage: ${this._result.bossDamage}`, W / 2, ly);
+      ly += 35;
     }
 
     if (this._result.scoreBonus > 0) {
       ctx.fillStyle = '#ffd700';
-      ctx.fillText(`Score: +${this._result.scoreBonus}`, W / 2, H / 2 + 60);
+      ctx.font = '22px Courier New';
+      ctx.fillText(`Score: +${this._result.scoreBonus}`, W / 2, ly);
+      ly += 35;
     }
 
     if (this._result.turnPenalty > 0) {
       ctx.fillStyle = '#ff6644';
-      ctx.font = 'bold 16px Courier New';
-      ctx.fillText(`-${this._result.turnPenalty} Turn`, W / 2, H / 2 + 90);
+      ctx.font = 'bold 18px Courier New';
+      ctx.fillText(`-${this._result.turnPenalty} Turn`, W / 2, ly);
+      ly += 35;
     }
 
     if (this._result.lassosUsed > 0) {
       ctx.fillStyle = '#c49a6c';
-      ctx.font = 'bold 16px Courier New';
-      ctx.fillText(`Lassos Used: ${this._result.lassosUsed}`, W / 2, H / 2 + 120);
+      ctx.font = 'bold 18px Courier New';
+      ctx.fillText(`Lassos Used: ${this._result.lassosUsed}`, W / 2, ly);
     }
   }
 }

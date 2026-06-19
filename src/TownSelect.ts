@@ -14,16 +14,16 @@ export class TownSelect {
     const label = town.type === 'wilderness' ? 'Wilderness' : 'Town';
     ctx.fillStyle = CONFIG.colors.hudGray;
     ctx.font = '20px Courier New';
-    ctx.fillText(`— ${label} —`, W / 2, 100);
+    ctx.fillText(`— ${label} —`, W / 2, H * 0.1);
 
     ctx.fillStyle = CONFIG.colors.hudGold;
     ctx.font = 'bold 44px Courier New';
-    ctx.fillText(town.name, W / 2, 170);
+    ctx.fillText(town.name, W / 2, H * 0.18);
 
     ctx.fillStyle = CONFIG.colors.hudWhite;
     ctx.font = '18px Courier New';
 
-    const infoY = 240;
+    const infoY = Math.floor(H * 0.25);
     const lines = [
       `Turn Budget: ${town.turnBudget}`,
       `Score Target: ${town.scoreTarget}`,
@@ -45,7 +45,7 @@ export class TownSelect {
       ctx.fillText(line, W / 2, infoY + i * 30);
     });
 
-    const btnY = 420;
+    const btnY = Math.floor(H * 0.44);
     const pulse = 0.5 + Math.sin(performance.now() / 300) * 0.5;
     ctx.globalAlpha = 0.7 + pulse * 0.3;
 
@@ -64,7 +64,7 @@ export class TownSelect {
   }
 
   handleClick(mx: number, my: number): boolean {
-    const btnY = 420;
+    const btnY = Math.floor(H * 0.44);
     return (
       mx >= W / 2 - 120 && mx <= W / 2 + 120 &&
       my >= btnY && my <= btnY + 50

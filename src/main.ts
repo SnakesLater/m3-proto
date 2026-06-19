@@ -22,7 +22,7 @@ function loop(now: number): void {
   requestAnimationFrame(loop);
 }
 
-function canvasCoords(e: MouseEvent): [number, number] {
+function canvasCoords(e: MouseEvent | PointerEvent): [number, number] {
   const rect = canvas.getBoundingClientRect();
   const sx = W / rect.width;
   const sy = H / rect.height;
@@ -32,6 +32,26 @@ function canvasCoords(e: MouseEvent): [number, number] {
 canvas.addEventListener('click', (e: MouseEvent) => {
   const [mx, my] = canvasCoords(e);
   game.handleClick(mx, my);
+});
+
+canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  const [mx, my] = canvasCoords(e);
+  game.handlePointerDown(mx, my);
+});
+
+canvas.addEventListener('pointermove', (e: PointerEvent) => {
+  e.preventDefault();
+  const [mx, my] = canvasCoords(e);
+  game.handlePointerMove(mx, my);
+});
+
+canvas.addEventListener('pointerup', (e: PointerEvent) => {
+  e.preventDefault();
+  canvas.releasePointerCapture(e.pointerId);
+  const [mx, my] = canvasCoords(e);
+  game.handlePointerUp(mx, my);
 });
 
 canvas.addEventListener('mousemove', (e: MouseEvent) => {

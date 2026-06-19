@@ -20,6 +20,7 @@ export class Board {
 
   selected: Piece | null;
   hoverCell: { col: number; row: number } | null = null;
+  swipeStart: { col: number; row: number } | null = null;
   swapPair: [Piece, Piece] | null;
   isSwapBack: boolean;
   phase: BoardPhase;
@@ -382,6 +383,42 @@ export class Board {
     this.cowCount--;
     if (this.hasCows) this.pendingCowSpawn = true;
     if (this.onCowRemoved) this.onCowRemoved();
+  }
+
+  onPointerDown(mx: number, my: number): void {
+    if (this.phase !== BoardPhase.Idle || !this.canPlay) return;
+    const coord = this.getGridCoord(mx, my);
+    if (!coord) return;
+    const p = this.grid[coord.row][coord.col];
+    if (!p || p.removing) return;
+    this.swipeStart = coord;
+  }
+
+  onPointerMove(mx: number, my: number, effects: EffectManager): void {
+    if (!this.swipeStart || this.phase !== BoardPhase.Idle) return;
+    const coord = this.getGridCoord(mx, my);
+    if (!coord) return;
+    if (coord.col === this.swipeStart.col && coord.row === this.swipeStart.row) return;
+    const dr = coord.row - this.swipeStart.row;
+    const dc = coord.col - this.swipeStart.col;
+    if (Math.abs(dr) + Math.abs(dc) !== 1) return;
+    const a = this.grid[this.swipeStart.row][this.swipeStart.col];
+    const b = this.grid[coord.row][coord.col];
+    if (!a || !b || a.removing || b.removing) return;
+    if (a.type === LASSO_TYPE) return;
+    if (this.selected) {
+      this.selected.selected = false;
+      this.selected = null;
+    }
+    this.startSwap(a, b);
+    this.swipeStart = null;
+  }
+
+  onPointerUp(mx: number, my: number, effects: EffectManager): void {
+    if (this.swipeStart) {
+      this.handleClick(mx, my, effects);
+    }
+    this.swipeStart = null;
   }
 
   private startSwap(a: Piece, b: Piece): void {
